@@ -1,0 +1,2217 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A small, local-first tracker for Codex and Claude Code sessions."
+    />
+    <title>Session Index — Agent session tracker</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #18211d;
+        --muted: #66706a;
+        --soft-muted: #88918c;
+        --paper: #f4f2ec;
+        --surface: #fffefa;
+        --line: #dedfd8;
+        --line-dark: #c7cbc2;
+        --green: #1d5c43;
+        --green-soft: #dcebe3;
+        --orange: #b75a2a;
+        --orange-soft: #f3e3d8;
+        --amber: #9a6814;
+        --amber-soft: #f6ebc9;
+        --danger: #9e352d;
+        --shadow: 0 1px 2px rgba(20, 34, 27, 0.05),
+          0 12px 32px rgba(20, 34, 27, 0.06);
+        --radius: 14px;
+        --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: var(--paper);
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 9% 1%, rgba(29, 92, 67, 0.07), transparent 24rem),
+          var(--paper);
+        font-family: var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button,
+      input,
+      textarea,
+      select {
+        font: inherit;
+      }
+
+      button {
+        color: inherit;
+      }
+
+      button:focus-visible,
+      input:focus-visible,
+      textarea:focus-visible,
+      select:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid rgba(29, 92, 67, 0.2);
+        outline-offset: 2px;
+      }
+
+      .page-shell {
+        width: min(1180px, calc(100% - 40px));
+        margin: 0 auto;
+        padding: 28px 0 56px;
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 48px;
+        margin-bottom: 24px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 11px;
+        color: var(--ink);
+        font-weight: 750;
+        letter-spacing: -0.02em;
+      }
+
+      .brand-mark {
+        position: relative;
+        width: 29px;
+        height: 29px;
+        border: 1.5px solid var(--ink);
+        border-radius: 9px;
+      }
+
+      .brand-mark::before,
+      .brand-mark::after {
+        position: absolute;
+        left: 6px;
+        right: 6px;
+        height: 1.5px;
+        border-radius: 2px;
+        background: var(--ink);
+        content: "";
+      }
+
+      .brand-mark::before {
+        top: 9px;
+      }
+
+      .brand-mark::after {
+        top: 16px;
+        right: 11px;
+      }
+
+      .top-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .tracker {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: calc(var(--radius) + 4px);
+        background: rgba(255, 254, 250, 0.84);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(12px);
+      }
+
+      .privacy-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 22px;
+        padding: 18px 20px;
+        border-bottom: 1px solid #c9ddd1;
+        background: #edf5f0;
+      }
+
+      .privacy-banner[hidden] {
+        display: none;
+      }
+
+      .privacy-banner-copy {
+        display: flex;
+        align-items: flex-start;
+        gap: 13px;
+      }
+
+      .privacy-banner-copy > svg {
+        width: 22px;
+        height: 22px;
+        flex: 0 0 auto;
+        color: var(--green);
+      }
+
+      .privacy-banner h2 {
+        margin: 0 0 4px;
+        font-size: 0.9rem;
+        letter-spacing: -0.015em;
+      }
+
+      .privacy-banner p {
+        max-width: 630px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.76rem;
+        line-height: 1.5;
+      }
+
+      .privacy-banner-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .inline-code {
+        padding: 2px 5px;
+        border: 1px solid rgba(29, 92, 67, 0.16);
+        border-radius: 5px;
+        color: var(--green);
+        background: rgba(255, 255, 255, 0.55);
+        font-family: var(--mono);
+        font-size: 0.92em;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 18px 20px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .toolbar-left,
+      .toolbar-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .search {
+        position: relative;
+        width: min(310px, 32vw);
+      }
+
+      .search svg {
+        position: absolute;
+        top: 50%;
+        left: 12px;
+        width: 16px;
+        height: 16px;
+        color: var(--soft-muted);
+        transform: translateY(-50%);
+        pointer-events: none;
+      }
+
+      .search input {
+        width: 100%;
+        height: 40px;
+        padding: 0 12px 0 38px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        color: var(--ink);
+        background: var(--surface);
+      }
+
+      .search input::placeholder {
+        color: var(--soft-muted);
+      }
+
+      .folder-filter select {
+        width: min(190px, 20vw);
+        height: 40px;
+        padding: 0 30px 0 11px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        color: var(--muted);
+        background: var(--surface);
+        font-size: 0.78rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+
+      .filters {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        padding: 3px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: #ebeae4;
+      }
+
+      .filter-button {
+        height: 32px;
+        padding: 0 12px;
+        border: 0;
+        border-radius: 7px;
+        color: var(--muted);
+        background: transparent;
+        font-size: 0.8rem;
+        font-weight: 650;
+        cursor: pointer;
+      }
+
+      .filter-button.active {
+        color: var(--ink);
+        background: var(--surface);
+        box-shadow: 0 1px 3px rgba(26, 35, 31, 0.08);
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 40px;
+        padding: 0 14px;
+        border: 1px solid var(--line-dark);
+        border-radius: 10px;
+        background: var(--surface);
+        font-size: 0.84rem;
+        font-weight: 700;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: transform 140ms ease, border-color 140ms ease,
+          background-color 140ms ease;
+      }
+
+      .button:hover {
+        border-color: #acb2a9;
+        transform: translateY(-1px);
+      }
+
+      .button svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .button.primary {
+        border-color: var(--ink);
+        color: #fff;
+        background: var(--ink);
+      }
+
+      .button.primary:hover {
+        background: #29352f;
+      }
+
+      .button.ghost {
+        border-color: transparent;
+        background: transparent;
+      }
+
+      .button.danger {
+        border-color: rgba(158, 53, 45, 0.25);
+        color: var(--danger);
+        background: #fffaf8;
+      }
+
+      .button:disabled {
+        cursor: not-allowed;
+        opacity: 0.68;
+        transform: none;
+      }
+
+      .button.scanning:disabled {
+        cursor: wait;
+      }
+
+      .button.scanning svg {
+        animation: scan-spin 900ms linear infinite;
+      }
+
+      .icon-button {
+        display: inline-grid;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        place-items: center;
+        border: 1px solid transparent;
+        border-radius: 9px;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .icon-button:hover {
+        border-color: var(--line);
+        background: #f5f4ef;
+      }
+
+      .icon-button svg {
+        width: 17px;
+        height: 17px;
+      }
+
+      .table-head,
+      .session-row {
+        display: grid;
+        grid-template-columns: minmax(260px, 1.45fr) 96px minmax(170px, 0.85fr) 98px 104px 122px 38px;
+        gap: 14px;
+        align-items: center;
+      }
+
+      .table-head {
+        min-height: 48px;
+        padding: 0 20px;
+        border-bottom: 1px solid var(--line);
+        color: var(--soft-muted);
+        font-size: 0.68rem;
+        font-weight: 800;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+      }
+
+      .session-row {
+        min-height: 104px;
+        padding: 18px 20px;
+        border-bottom: 1px solid var(--line);
+        transition: background-color 140ms ease;
+      }
+
+      .session-row:last-child {
+        border-bottom: 0;
+      }
+
+      .session-row:hover {
+        background: rgba(245, 245, 239, 0.7);
+      }
+
+      .session-title {
+        margin: 0 0 5px;
+        overflow: hidden;
+        font-size: 0.96rem;
+        font-weight: 760;
+        letter-spacing: -0.015em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .session-about {
+        display: -webkit-box;
+        max-width: 560px;
+        margin: 0;
+        overflow: hidden;
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.45;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+      }
+
+      .session-metadata {
+        display: flex;
+        min-width: 0;
+        flex-wrap: wrap;
+        gap: 4px 12px;
+        margin-top: 7px;
+        color: var(--soft-muted);
+        font-family: var(--mono);
+        font-size: 0.66rem;
+        line-height: 1.35;
+      }
+
+      .session-metadata span + span::before {
+        margin-right: 12px;
+        color: #c7ccc8;
+        content: "\00b7";
+      }
+
+      .follow-up-note {
+        max-width: 560px;
+        margin: 8px 0 0;
+        padding: 7px 9px;
+        border-left: 2px solid #d9bd70;
+        border-radius: 0 6px 6px 0;
+        color: #735f27;
+        background: rgba(247, 237, 207, 0.62);
+        font-size: 0.75rem;
+        line-height: 1.45;
+      }
+
+      .follow-up-note strong {
+        font-weight: 800;
+      }
+
+      .agent-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        width: fit-content;
+        padding: 6px 9px;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 760;
+      }
+
+      .agent-badge::before {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        content: "";
+      }
+
+      .agent-badge.codex {
+        color: var(--green);
+        background: var(--green-soft);
+      }
+
+      .agent-badge.codex::before {
+        background: var(--green);
+      }
+
+      .agent-badge.claude {
+        color: var(--orange);
+        background: var(--orange-soft);
+      }
+
+      .agent-badge.claude::before {
+        background: var(--orange);
+      }
+
+      .folder {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .folder svg {
+        width: 15px;
+        height: 15px;
+        flex: 0 0 auto;
+        color: var(--soft-muted);
+      }
+
+      .folder-button {
+        min-width: 0;
+        padding: 0;
+        overflow: hidden;
+        border: 0;
+        color: #4f5b55;
+        background: transparent;
+        font-family: var(--mono);
+        font-size: 0.74rem;
+        text-align: left;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+
+      .folder-button:hover {
+        color: var(--green);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      .updated {
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .resume-button {
+        min-width: 122px;
+      }
+
+      .follow-up-button {
+        min-width: 104px;
+        padding-right: 10px;
+        padding-left: 10px;
+        color: var(--muted);
+        background: transparent;
+      }
+
+      .follow-up-button svg {
+        fill: transparent;
+      }
+
+      .follow-up-button.is-follow-up {
+        border-color: #d9bd70;
+        color: var(--amber);
+        background: var(--amber-soft);
+      }
+
+      .follow-up-button.is-follow-up svg {
+        fill: currentColor;
+      }
+
+      .row-menu {
+        position: relative;
+      }
+
+      .row-menu summary {
+        display: grid;
+        width: 36px;
+        height: 36px;
+        list-style: none;
+        place-items: center;
+        border-radius: 9px;
+        cursor: pointer;
+      }
+
+      .row-menu summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .row-menu summary:hover {
+        background: #eeeee8;
+      }
+
+      .row-menu summary svg {
+        width: 17px;
+        height: 17px;
+      }
+
+      .menu-popover {
+        position: absolute;
+        z-index: 4;
+        top: 39px;
+        right: 0;
+        width: 180px;
+        padding: 5px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface);
+        box-shadow: 0 12px 30px rgba(25, 34, 30, 0.14);
+      }
+
+      .menu-popover button {
+        width: 100%;
+        padding: 8px 9px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        font-size: 0.78rem;
+        font-weight: 650;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .menu-popover button:hover {
+        background: #f0f0ea;
+      }
+
+      .menu-popover button.delete-action {
+        color: var(--danger);
+      }
+
+      .empty-state {
+        display: none;
+        min-height: 345px;
+        padding: 55px 24px;
+        place-items: center;
+        text-align: center;
+      }
+
+      .empty-state.visible {
+        display: grid;
+      }
+
+      .empty-icon {
+        position: relative;
+        width: 72px;
+        height: 72px;
+        margin: 0 auto 22px;
+        border: 1px solid var(--line-dark);
+        border-radius: 22px;
+        background: #f3f2ec;
+        transform: rotate(-3deg);
+      }
+
+      .empty-icon::before,
+      .empty-icon::after {
+        position: absolute;
+        left: 18px;
+        height: 2px;
+        border-radius: 2px;
+        background: var(--green);
+        content: "";
+      }
+
+      .empty-icon::before {
+        top: 26px;
+        width: 35px;
+      }
+
+      .empty-icon::after {
+        top: 39px;
+        width: 24px;
+      }
+
+      .empty-state h2 {
+        margin: 0 0 8px;
+        font-size: 1.2rem;
+        letter-spacing: -0.025em;
+      }
+
+      .empty-state p {
+        max-width: 350px;
+        margin: 0 auto 20px;
+        color: var(--muted);
+        font-size: 0.87rem;
+        line-height: 1.55;
+      }
+
+      .tracker-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 49px;
+        padding: 0 20px;
+        border-top: 1px solid var(--line);
+        color: var(--soft-muted);
+        font-size: 0.73rem;
+      }
+
+      .footer-tools {
+        display: flex;
+        gap: 14px;
+      }
+
+      .footer-tools button,
+      .footer-tools label {
+        padding: 0;
+        border: 0;
+        color: var(--muted);
+        background: transparent;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .footer-tools button:hover,
+      .footer-tools label:hover {
+        color: var(--ink);
+      }
+
+      .import-input {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      dialog {
+        width: min(620px, calc(100% - 32px));
+        max-height: calc(100vh - 32px);
+        padding: 0;
+        overflow: auto;
+        border: 1px solid var(--line-dark);
+        border-radius: 18px;
+        color: var(--ink);
+        background: var(--surface);
+        box-shadow: 0 30px 90px rgba(23, 33, 28, 0.22);
+      }
+
+      dialog::backdrop {
+        background: rgba(19, 27, 23, 0.38);
+        backdrop-filter: blur(3px);
+      }
+
+      #renameDialog {
+        width: min(460px, calc(100% - 32px));
+      }
+
+      .dialog-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 24px 26px 20px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .dialog-head h2 {
+        margin: 0 0 5px;
+        font-size: 1.25rem;
+        letter-spacing: -0.03em;
+      }
+
+      .dialog-head p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+
+      .session-form {
+        padding: 24px 26px 26px;
+      }
+
+      .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+
+      .field {
+        display: grid;
+        gap: 7px;
+      }
+
+      .field.full {
+        grid-column: 1 / -1;
+      }
+
+      .field label {
+        font-size: 0.78rem;
+        font-weight: 750;
+      }
+
+      .field .hint {
+        margin: -2px 0 0;
+        color: var(--soft-muted);
+        font-size: 0.7rem;
+        line-height: 1.4;
+      }
+
+      .field input,
+      .field textarea,
+      .field select {
+        width: 100%;
+        border: 1px solid var(--line-dark);
+        border-radius: 9px;
+        color: var(--ink);
+        background: #fff;
+      }
+
+      .field input,
+      .field select {
+        height: 43px;
+        padding: 0 11px;
+      }
+
+      .field textarea {
+        min-height: 92px;
+        padding: 10px 11px;
+        resize: vertical;
+        line-height: 1.5;
+      }
+
+      .field input::placeholder,
+      .field textarea::placeholder {
+        color: #a0a8a3;
+      }
+
+      .form-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 9px;
+        margin-top: 26px;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+      }
+
+      .confirm-copy {
+        padding: 26px;
+      }
+
+      .privacy-details {
+        padding: 24px 26px 26px;
+      }
+
+      .privacy-details > p {
+        margin: 0 0 18px;
+        color: var(--muted);
+        font-size: 0.84rem;
+        line-height: 1.6;
+      }
+
+      .privacy-facts {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .privacy-facts li {
+        display: grid;
+        grid-template-columns: 18px 1fr;
+        gap: 10px;
+        color: var(--muted);
+        font-size: 0.8rem;
+        line-height: 1.5;
+      }
+
+      .privacy-facts svg {
+        width: 17px;
+        height: 17px;
+        color: var(--green);
+      }
+
+      .privacy-controls {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin-top: 22px;
+        padding-top: 20px;
+        border-top: 1px solid var(--line);
+      }
+
+      .privacy-controls span {
+        color: var(--muted);
+        font-size: 0.73rem;
+      }
+
+      .confirm-copy h2 {
+        margin: 0 0 10px;
+        font-size: 1.2rem;
+      }
+
+      .confirm-copy p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.85rem;
+        line-height: 1.6;
+      }
+
+      .confirm-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 9px;
+        margin-top: 24px;
+      }
+
+      .toast-region {
+        position: fixed;
+        z-index: 10;
+        right: 22px;
+        bottom: 22px;
+        display: grid;
+        gap: 8px;
+        width: min(360px, calc(100% - 44px));
+        pointer-events: none;
+      }
+
+      .toast {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border: 1px solid #31443a;
+        border-radius: 11px;
+        color: #f7fbf8;
+        background: #1e2c25;
+        box-shadow: 0 12px 30px rgba(17, 24, 20, 0.22);
+        font-size: 0.8rem;
+        font-weight: 650;
+        animation: toast-in 180ms ease-out;
+      }
+
+      .toast svg {
+        width: 16px;
+        height: 16px;
+        flex: 0 0 auto;
+      }
+
+      @keyframes toast-in {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes scan-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      @media (max-width: 980px) {
+        .table-head,
+        .session-row {
+          grid-template-columns: minmax(250px, 1.35fr) 94px minmax(150px, 0.75fr) 104px 122px 38px;
+        }
+
+        .table-head > :nth-child(4),
+        .session-row > :nth-child(4) {
+          display: none;
+        }
+      }
+
+      @media (max-width: 760px) {
+        .page-shell {
+          width: min(100% - 24px, 680px);
+          padding-top: 18px;
+        }
+
+        .topbar {
+          margin-bottom: 18px;
+        }
+
+        .toolbar {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .privacy-banner {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .privacy-banner-actions {
+          justify-content: flex-end;
+        }
+
+        .toolbar-left,
+        .toolbar-right {
+          justify-content: space-between;
+        }
+
+        .toolbar-left {
+          align-items: stretch;
+          flex-wrap: wrap;
+        }
+
+        .toolbar-left .search {
+          flex: 1 0 100%;
+        }
+
+        .toolbar-left .folder-filter,
+        .toolbar-left #scanButton {
+          flex: 1;
+        }
+
+        .search {
+          width: 100%;
+        }
+
+        .folder-filter select {
+          width: 100%;
+          max-width: none;
+        }
+
+        .filters {
+          flex: 0 0 auto;
+        }
+
+        .table-head {
+          display: none;
+        }
+
+        .session-row {
+          position: relative;
+          display: grid;
+          grid-template-columns: 1fr auto;
+          gap: 16px 14px;
+          padding: 20px;
+        }
+
+        .session-main {
+          grid-column: 1 / -1;
+          padding-right: 28px;
+        }
+
+        .session-row > .agent-badge {
+          grid-column: 1;
+          grid-row: 2;
+        }
+
+        .session-row > .folder {
+          grid-column: 1 / -1;
+          grid-row: 3;
+        }
+
+        .session-row > .updated {
+          display: none;
+        }
+
+        .session-row > .resume-button {
+          grid-column: 2;
+          grid-row: 2;
+        }
+
+        .session-row > .follow-up-button {
+          grid-column: 1 / -1;
+          grid-row: 4;
+          width: 100%;
+        }
+
+        .session-row > .row-menu {
+          position: absolute;
+          top: 13px;
+          right: 12px;
+        }
+
+        .tracker-footer {
+          gap: 10px;
+          align-items: flex-start;
+          flex-direction: column;
+          padding-top: 13px;
+          padding-bottom: 13px;
+        }
+
+        .privacy-controls {
+          align-items: stretch;
+          flex-direction: column;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .top-actions .button span,
+        #exportTopButton span {
+          display: none;
+        }
+
+        .toolbar-right {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .toolbar-left {
+          flex-direction: column;
+          flex-wrap: nowrap;
+        }
+
+        .toolbar-left .button {
+          width: 100%;
+        }
+
+        .toolbar-right .button {
+          width: 100%;
+        }
+
+        .filters {
+          width: 100%;
+        }
+
+        .filter-button {
+          flex: 1;
+          padding-right: 7px;
+          padding-left: 7px;
+        }
+
+        .form-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .field.full {
+          grid-column: 1;
+        }
+
+        .dialog-head,
+        .session-form {
+          padding-right: 20px;
+          padding-left: 20px;
+        }
+
+        .tracker-footer {
+          align-items: center;
+          text-align: center;
+        }
+
+        .footer-tools {
+          justify-content: center;
+          width: 100%;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="topbar">
+        <div class="brand" aria-label="Session Index home">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span>Session Index</span>
+        </div>
+        <div class="top-actions">
+          <button class="button ghost" id="exportTopButton" type="button">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 3v12m0 0 4-4m-4 4-4-4" />
+              <path d="M5 16v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" />
+            </svg>
+            <span>Export</span>
+          </button>
+          <button class="button primary" id="topAddButton" type="button">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            <span>Add session</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="tracker" aria-label="Saved agent sessions">
+        <aside class="privacy-banner" id="privacyBanner" aria-labelledby="privacyBannerTitle" hidden>
+          <div class="privacy-banner-copy">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 3 4.5 6v5.5c0 4.7 3.2 7.9 7.5 9.5 4.3-1.6 7.5-4.8 7.5-9.5V6z" />
+              <path d="m9 12 2 2 4-5" />
+            </svg>
+            <div>
+              <h2 id="privacyBannerTitle">Enable local session discovery?</h2>
+              <p>
+                Session Index reads short metadata and prompt excerpts from your local Codex and Claude stores,
+                filtered to <code class="inline-code" data-scan-root>your project root</code>. No account, telemetry,
+                cloud service, or third-party request is involved.
+              </p>
+            </div>
+          </div>
+          <div class="privacy-banner-actions">
+            <button class="button ghost" id="dismissPrivacyButton" type="button">Not now</button>
+            <button class="button" id="privacyLearnButton" type="button">Details</button>
+            <button class="button primary" id="enableAutoScanButton" type="button">Enable auto-scan</button>
+          </div>
+        </aside>
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <label class="search">
+              <span class="sr-only" hidden>Search sessions</span>
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-4-4" />
+              </svg>
+              <input id="searchInput" type="search" placeholder="Search sessions or folders…" autocomplete="off" />
+            </label>
+            <label class="folder-filter">
+              <span class="sr-only" hidden>Filter by folder</span>
+              <select id="folderFilter" aria-label="Filter by folder">
+                <option value="all">All folders</option>
+              </select>
+            </label>
+            <button class="button" id="scanButton" type="button" title="Find Codex and Claude sessions under the configured project root">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <circle cx="12" cy="12" r="8" />
+                <circle cx="12" cy="12" r="2.5" />
+                <path d="M12 2v3M22 12h-3M12 22v-3M2 12h3" />
+              </svg>
+              <span>Scan projects</span>
+            </button>
+          </div>
+          <div class="toolbar-right">
+            <div class="filters" role="group" aria-label="Filter sessions">
+              <button class="filter-button active" type="button" data-filter="all" aria-pressed="true">All</button>
+              <button class="filter-button" type="button" data-filter="codex" aria-pressed="false">Codex</button>
+              <button class="filter-button" type="button" data-filter="claude" aria-pressed="false">Claude</button>
+              <button class="filter-button" type="button" data-filter="followup" aria-pressed="false">Follow up</button>
+            </div>
+            <button class="button primary" id="addButton" type="button">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Add session
+            </button>
+          </div>
+        </div>
+
+        <div class="table-head" aria-hidden="true">
+          <span>Session</span>
+          <span>Agent</span>
+          <span>Folder</span>
+          <span>Updated</span>
+          <span>Follow up</span>
+          <span>Resume</span>
+          <span></span>
+        </div>
+        <div id="sessionList"></div>
+
+        <div class="empty-state" id="emptyState">
+          <div>
+            <div class="empty-icon" aria-hidden="true"></div>
+            <h2 id="emptyTitle">No sessions yet</h2>
+            <p id="emptyCopy">
+              Save your first agent thread so its context, folder, and resume command
+              are always one click away.
+            </p>
+            <button class="button primary" id="emptyAddButton" type="button">Add your first session</button>
+          </div>
+        </div>
+
+        <footer class="tracker-footer">
+          <span id="scanStatus">Stored locally · Manual scan only</span>
+          <div class="footer-tools">
+            <button type="button" id="privacyButton">Privacy</button>
+            <button type="button" id="exportButton">Export JSON</button>
+            <label for="importInput">Import JSON</label>
+            <input class="import-input" id="importInput" type="file" accept="application/json,.json" />
+            <button type="button" id="clearButton">Clear all</button>
+          </div>
+        </footer>
+      </section>
+    </main>
+
+    <dialog id="sessionDialog" aria-labelledby="dialogTitle">
+      <div class="dialog-head">
+        <div>
+          <h2 id="dialogTitle">Add a session</h2>
+          <p>Keep just enough context to make returning effortless.</p>
+        </div>
+        <button class="icon-button" id="closeDialogButton" type="button" aria-label="Close dialog">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
+        </button>
+      </div>
+      <form class="session-form" id="sessionForm">
+        <input id="editingId" type="hidden" />
+        <div class="form-grid">
+          <div class="field">
+            <label for="agentInput">Agent</label>
+            <select id="agentInput" required>
+              <option value="codex">Codex</option>
+              <option value="claude">Claude Code</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="updatedInput">Last updated</label>
+            <input id="updatedInput" type="date" required />
+          </div>
+          <div class="field full">
+            <label for="titleInput">Session title</label>
+            <input id="titleInput" type="text" maxlength="100" placeholder="e.g. Checkout performance pass" required />
+          </div>
+          <div class="field full">
+            <label for="aboutInput">What was it about?</label>
+            <textarea id="aboutInput" maxlength="500" placeholder="A short note about the goal, progress, or next step…" required></textarea>
+            <p class="hint">For discovered sessions, editing this creates a persistent override of the local prompt excerpt.</p>
+          </div>
+          <div class="field full">
+            <label for="folderInput">Project folder</label>
+            <input id="folderInput" type="text" maxlength="300" placeholder="C:\projects\my-app or /Users/me/code/my-app" required />
+          </div>
+          <div class="field full">
+            <label for="sessionIdInput">Session ID or name</label>
+            <input id="sessionIdInput" type="text" maxlength="180" placeholder="Paste the ID used by your agent CLI" required />
+            <p class="hint" id="commandHint">Creates: codex resume &lt;session-id&gt;</p>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="button" id="cancelButton" type="button">Cancel</button>
+          <button class="button primary" type="submit">Save session</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="renameDialog" aria-labelledby="renameTitle">
+      <div class="dialog-head">
+        <div>
+          <h2 id="renameTitle">Rename session</h2>
+          <p id="renameDescription">Choose the name shown in your list.</p>
+        </div>
+        <button class="icon-button" id="closeRenameButton" type="button" aria-label="Close rename dialog">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
+        </button>
+      </div>
+      <form class="session-form" id="renameForm">
+        <input id="renamingId" type="hidden" />
+        <div class="field">
+          <label for="renameInput">Session name</label>
+          <input id="renameInput" type="text" maxlength="100" required />
+          <p class="hint" id="detectedNameHint"></p>
+        </div>
+        <div class="form-actions">
+          <button class="button ghost" id="resetNameButton" type="button">Use detected name</button>
+          <button class="button" id="cancelRenameButton" type="button">Cancel</button>
+          <button class="button primary" type="submit">Save name</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="noteDialog" aria-labelledby="noteTitle">
+      <div class="dialog-head">
+        <div>
+          <h2 id="noteTitle">Follow-up note</h2>
+          <p>Add the next step you want waiting for you.</p>
+        </div>
+        <button class="icon-button" id="closeNoteButton" type="button" aria-label="Close follow-up note dialog">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
+        </button>
+      </div>
+      <form class="session-form" id="noteForm">
+        <input id="notingId" type="hidden" />
+        <div class="field">
+          <label for="noteInput">Your note</label>
+          <textarea id="noteInput" maxlength="500" placeholder="e.g. Check the failing test, then open the PR"></textarea>
+          <p class="hint">Saving also keeps this session on your Follow up list.</p>
+        </div>
+        <div class="form-actions">
+          <button class="button" id="cancelNoteButton" type="button">Cancel</button>
+          <button class="button primary" type="submit">Save note</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="privacyDialog" aria-labelledby="privacyTitle">
+      <div class="dialog-head">
+        <div>
+          <h2 id="privacyTitle">Local-only by design</h2>
+          <p>No login, no telemetry, no cloud database.</p>
+        </div>
+        <button class="icon-button" id="closePrivacyButton" type="button" aria-label="Close privacy details">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
+        </button>
+      </div>
+      <div class="privacy-details">
+        <p>
+          The server listens only on <code class="inline-code">127.0.0.1</code>. Scanning is limited to sessions
+          whose recorded working folder is inside <code class="inline-code" data-scan-root>your project root</code>.
+        </p>
+        <ul class="privacy-facts">
+          <li>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6" /></svg>
+            <span>Reads session IDs, working folders, timestamps, model and usage metadata, titles, and short prompt excerpts from local profile stores.</span>
+          </li>
+          <li>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6" /></svg>
+            <span>Codex summaries use the first useful user prompt. Claude summaries prefer its recorded last prompt, then fall back to the first useful user prompt. Names and summaries can be overridden.</span>
+          </li>
+          <li>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6" /></svg>
+            <span>Makes no outbound network requests and loads no remote scripts, fonts, analytics, or advertisements.</span>
+          </li>
+          <li>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6" /></svg>
+            <span>Saves your shortlist in this browser only. JSON exports may contain prompt excerpts, so treat backups as private.</span>
+          </li>
+        </ul>
+        <div class="privacy-controls">
+          <span id="autoScanDescription">Auto-scan is off.</span>
+          <button class="button primary" id="autoScanToggleButton" type="button">Enable auto-scan</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="confirmDialog" aria-labelledby="confirmTitle">
+      <div class="confirm-copy">
+        <h2 id="confirmTitle">Clear all sessions?</h2>
+        <p id="confirmMessage">This removes every saved session from this browser. Export first if you want a backup.</p>
+        <div class="confirm-actions">
+          <button class="button" id="cancelConfirmButton" type="button">Cancel</button>
+          <button class="button danger" id="confirmButton" type="button">Clear all</button>
+        </div>
+      </div>
+    </dialog>
+
+    <div class="toast-region" id="toastRegion" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <script>
+      (() => {
+        "use strict";
+
+        const STORAGE_KEY = "session-index.sessions.v1";
+        const SCAN_PREF_KEY = "session-index.auto-scan.v1";
+        const initialSessions = loadSessions();
+        const storedScanPreference = readScanPreference();
+        const state = {
+          sessions: initialSessions,
+          filter: "all",
+          folder: "all",
+          query: "",
+          pendingAction: null,
+          scanning: false,
+          autoScan: storedScanPreference === "enabled",
+          privacyDismissed: storedScanPreference === "disabled",
+          scanRoot: "your project root",
+        };
+
+        const elements = {
+          sessionList: document.querySelector("#sessionList"),
+          emptyState: document.querySelector("#emptyState"),
+          emptyTitle: document.querySelector("#emptyTitle"),
+          emptyCopy: document.querySelector("#emptyCopy"),
+          searchInput: document.querySelector("#searchInput"),
+          folderFilter: document.querySelector("#folderFilter"),
+          filterButtons: [...document.querySelectorAll(".filter-button")],
+          scanButton: document.querySelector("#scanButton"),
+          scanStatus: document.querySelector("#scanStatus"),
+          privacyBanner: document.querySelector("#privacyBanner"),
+          privacyDialog: document.querySelector("#privacyDialog"),
+          autoScanDescription: document.querySelector("#autoScanDescription"),
+          autoScanToggleButton: document.querySelector("#autoScanToggleButton"),
+          renameDialog: document.querySelector("#renameDialog"),
+          renameForm: document.querySelector("#renameForm"),
+          renamingId: document.querySelector("#renamingId"),
+          renameInput: document.querySelector("#renameInput"),
+          detectedNameHint: document.querySelector("#detectedNameHint"),
+          resetNameButton: document.querySelector("#resetNameButton"),
+          noteDialog: document.querySelector("#noteDialog"),
+          noteForm: document.querySelector("#noteForm"),
+          notingId: document.querySelector("#notingId"),
+          noteInput: document.querySelector("#noteInput"),
+          sessionDialog: document.querySelector("#sessionDialog"),
+          dialogTitle: document.querySelector("#dialogTitle"),
+          sessionForm: document.querySelector("#sessionForm"),
+          editingId: document.querySelector("#editingId"),
+          agentInput: document.querySelector("#agentInput"),
+          updatedInput: document.querySelector("#updatedInput"),
+          titleInput: document.querySelector("#titleInput"),
+          aboutInput: document.querySelector("#aboutInput"),
+          folderInput: document.querySelector("#folderInput"),
+          sessionIdInput: document.querySelector("#sessionIdInput"),
+          commandHint: document.querySelector("#commandHint"),
+          importInput: document.querySelector("#importInput"),
+          confirmDialog: document.querySelector("#confirmDialog"),
+          confirmTitle: document.querySelector("#confirmTitle"),
+          confirmMessage: document.querySelector("#confirmMessage"),
+          confirmButton: document.querySelector("#confirmButton"),
+          toastRegion: document.querySelector("#toastRegion"),
+        };
+
+        const icons = {
+          copy: '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
+          check: '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m5 12 4 4L19 6"/></svg>',
+          folder: '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/></svg>',
+          followUp: '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 2.75 5.57 6.15.9-4.45 4.33 1.05 6.12L12 17.03l-5.5 2.89 1.05-6.12L3.1 9.47l6.15-.9z"/></svg>',
+          more: '<svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>',
+        };
+
+        function loadSessions() {
+          try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed)
+              ? parsed.filter(isValidSession).map(normalizeSession)
+              : [];
+          } catch (error) {
+            console.warn("Could not load saved sessions", error);
+            return [];
+          }
+        }
+
+        function readScanPreference() {
+          try {
+            const preference = localStorage.getItem(SCAN_PREF_KEY);
+            return ["enabled", "disabled"].includes(preference) ? preference : null;
+          } catch {
+            return null;
+          }
+        }
+
+        function isValidSession(session) {
+          return (
+            session &&
+            typeof session.id === "string" &&
+            ["codex", "claude"].includes(session.agent) &&
+            typeof session.title === "string" &&
+            typeof session.about === "string" &&
+            typeof session.folder === "string" &&
+            typeof session.sessionId === "string" &&
+            typeof session.updatedAt === "string"
+          );
+        }
+
+        function normalizeSession(session) {
+          return {
+            ...session,
+            followUp: Boolean(session.followUp),
+            source: session.source === "scan" ? "scan" : "manual",
+            customTitle: typeof session.customTitle === "string" ? session.customTitle : "",
+            customAbout: typeof session.customAbout === "string" ? session.customAbout : "",
+            followUpNote: typeof session.followUpNote === "string" ? session.followUpNote : "",
+            metadata: session.metadata && typeof session.metadata === "object" ? session.metadata : {},
+          };
+        }
+
+        function displayTitle(session) {
+          return session.customTitle || session.title;
+        }
+
+        function displayAbout(session) {
+          return session.customAbout || session.about;
+        }
+
+        function compactNumber(value) {
+          if (!Number.isFinite(value)) return "";
+          return new Intl.NumberFormat(undefined, {
+            notation: value >= 1_000 ? "compact" : "standard",
+            maximumFractionDigits: 1,
+          }).format(value);
+        }
+
+        function formatBytes(value) {
+          if (!Number.isFinite(value) || value < 0) return "";
+          const units = ["B", "KB", "MB", "GB"];
+          let size = value;
+          let unit = 0;
+          while (size >= 1_024 && unit < units.length - 1) {
+            size /= 1_024;
+            unit += 1;
+          }
+          return `${size.toFixed(unit === 0 || size >= 10 ? 0 : 1)} ${units[unit]}`;
+        }
+
+        function metadataItems(session) {
+          const metadata = session.metadata || {};
+          const items = [];
+          if (typeof metadata.model === "string" && metadata.model) items.push(metadata.model);
+          if (Number.isFinite(metadata.turns) && metadata.turns > 0) {
+            items.push(`${metadata.turns} ${metadata.turns === 1 ? "turn" : "turns"}`);
+          }
+          if (Number.isFinite(metadata.messages) && metadata.messages > 0) {
+            items.push(`${metadata.messages} ${metadata.messages === 1 ? "message" : "messages"}`);
+          }
+          if (Number.isFinite(metadata.logBytes)) items.push(`${formatBytes(metadata.logBytes)} log`);
+          if (Number.isFinite(metadata.contextTokens) && metadata.contextTokens > 0) {
+            const used = compactNumber(metadata.contextTokens);
+            if (Number.isFinite(metadata.contextWindow) && metadata.contextWindow > 0) {
+              const percent = Math.min(999, Math.round((metadata.contextTokens / metadata.contextWindow) * 100));
+              items.push(`${used} / ${compactNumber(metadata.contextWindow)} context (${percent}%)`);
+            } else {
+              items.push(`${used} context`);
+            }
+          }
+          if (typeof metadata.effort === "string" && metadata.effort) items.push(`${metadata.effort} effort`);
+          if (typeof metadata.branch === "string" && metadata.branch) items.push(metadata.branch);
+          return items;
+        }
+
+        function saveSessions() {
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(state.sessions));
+          } catch (error) {
+            showToast("This browser could not save your changes");
+            console.error(error);
+          }
+        }
+
+        function updatePrivacyUi() {
+          elements.privacyBanner.hidden = state.autoScan || state.privacyDismissed;
+          document.querySelectorAll("[data-scan-root]").forEach((element) => {
+            element.textContent = state.scanRoot;
+          });
+          elements.autoScanDescription.textContent = state.autoScan
+            ? `Auto-scan is on for ${state.scanRoot}.`
+            : `Auto-scan is off. Manual scanning remains available for ${state.scanRoot}.`;
+          elements.autoScanToggleButton.textContent = state.autoScan
+            ? "Disable auto-scan"
+            : "Enable auto-scan";
+          elements.scanStatus.textContent = state.autoScan
+            ? `Stored locally · Auto-scans ${state.scanRoot} every 30 seconds`
+            : `Stored locally · Manual scan · ${state.scanRoot}`;
+        }
+
+        function setAutoScan(enabled) {
+          state.autoScan = enabled;
+          state.privacyDismissed = true;
+          try {
+            localStorage.setItem(SCAN_PREF_KEY, enabled ? "enabled" : "disabled");
+          } catch (error) {
+            console.warn("Could not save auto-scan preference", error);
+          }
+          updatePrivacyUi();
+          if (enabled) syncSessions({ notify: true });
+        }
+
+        async function loadServerConfig() {
+          try {
+            const response = await fetch("/api/config", { headers: { Accept: "application/json" } });
+            if (!response.ok) return;
+            const config = await response.json();
+            if (typeof config.scanRoot === "string" && config.scanRoot) state.scanRoot = config.scanRoot;
+          } catch {
+            // The rest of the tracker still works when opened without the local server.
+          } finally {
+            updatePrivacyUi();
+          }
+        }
+
+        function escapeHtml(value) {
+          return String(value)
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
+        }
+
+        function generateId() {
+          return globalThis.crypto?.randomUUID?.() || `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        }
+
+        function sessionKey(session) {
+          return `${session.agent}:${session.sessionId}`;
+        }
+
+        function today() {
+          const date = new Date();
+          const offset = date.getTimezoneOffset();
+          return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 10);
+        }
+
+        function formatDate(value) {
+          const date = new Date(`${value}T12:00:00`);
+          if (Number.isNaN(date.getTime())) return value;
+          const current = new Date(`${today()}T12:00:00`);
+          const days = Math.round((current - date) / 86_400_000);
+          if (days === 0) return "Today";
+          if (days === 1) return "Yesterday";
+          if (days > 1 && days < 7) return `${days} days ago`;
+          return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: date.getFullYear() === current.getFullYear() ? undefined : "numeric" }).format(date);
+        }
+
+        function resumeCommand(session) {
+          const quotedId = quoteShellArg(session.sessionId.trim());
+          return session.agent === "codex"
+            ? `codex resume ${quotedId}`
+            : `claude --resume ${quotedId}`;
+        }
+
+        function quoteShellArg(value) {
+          if (/^[A-Za-z0-9._:@/\\-]+$/.test(value)) return value;
+          return `'${value.replaceAll("'", "''")}'`;
+        }
+
+        function filteredSessions() {
+          const query = state.query.trim().toLowerCase();
+          return [...state.sessions]
+            .filter((session) => {
+              if (state.folder !== "all" && session.folder !== state.folder) return false;
+              if (state.filter === "all") return true;
+              if (state.filter === "followup") return session.followUp;
+              return session.agent === state.filter;
+            })
+            .filter((session) => {
+              if (!query) return true;
+              return [displayTitle(session), displayAbout(session), session.title, session.about, session.followUpNote, session.folder, session.sessionId, session.agent, ...metadataItems(session)]
+                .join(" ")
+                .toLowerCase()
+                .includes(query);
+            })
+            .sort((a, b) => (b.activityAt || b.updatedAt).localeCompare(a.activityAt || a.updatedAt));
+        }
+
+        function updateFolderFilter() {
+          const folders = [...new Set(state.sessions.map((session) => session.folder).filter(Boolean))]
+            .sort((a, b) => a.localeCompare(b));
+          if (state.folder !== "all" && !folders.includes(state.folder)) state.folder = "all";
+          const options = [new Option("All folders", "all")];
+          for (const folder of folders) {
+            const leaf = folder.split(/[\\/]/).filter(Boolean).pop() || folder;
+            const option = new Option(leaf, folder);
+            option.title = folder;
+            options.push(option);
+          }
+          elements.folderFilter.replaceChildren(...options);
+          elements.folderFilter.value = state.folder;
+        }
+
+        function render() {
+          updateFolderFilter();
+          const sessions = filteredSessions();
+          const total = state.sessions.length;
+          const followUpTotal = state.sessions.filter((session) => session.followUp).length;
+          elements.sessionList.innerHTML = sessions.map(sessionRow).join("");
+          const allFilter = elements.filterButtons.find((button) => button.dataset.filter === "all");
+          const followUpFilter = elements.filterButtons.find((button) => button.dataset.filter === "followup");
+          if (allFilter) allFilter.textContent = `All${total ? ` ${total}` : ""}`;
+          if (followUpFilter) followUpFilter.textContent = `Follow up${followUpTotal ? ` ${followUpTotal}` : ""}`;
+
+          const noResults = total > 0 && sessions.length === 0;
+          elements.emptyState.classList.toggle("visible", sessions.length === 0);
+          elements.emptyTitle.textContent = noResults ? "No matching sessions" : "No sessions yet";
+          elements.emptyCopy.textContent = noResults
+            ? "Try a different search or agent filter."
+            : "Save your first agent thread so its context, folder, and resume command are always one click away.";
+          document.querySelector("#emptyAddButton").hidden = noResults;
+        }
+
+        function sessionRow(session) {
+          const agentName = session.agent === "codex" ? "Codex" : "Claude";
+          const shownTitle = displayTitle(session);
+          const shownAbout = displayAbout(session);
+          const shownMetadata = metadataItems(session);
+          return `
+            <article class="session-row" data-id="${escapeHtml(session.id)}">
+              <div class="session-main">
+                <h2 class="session-title" title="${escapeHtml(shownTitle)}">${escapeHtml(shownTitle)}</h2>
+                <p class="session-about">${escapeHtml(shownAbout)}</p>
+                ${shownMetadata.length ? `<div class="session-metadata" aria-label="Session metadata">${shownMetadata.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
+                ${session.followUp && session.followUpNote ? `<p class="follow-up-note"><strong>Next:</strong> ${escapeHtml(session.followUpNote)}</p>` : ""}
+              </div>
+              <span class="agent-badge ${session.agent}">${agentName}</span>
+              <div class="folder" title="Click to copy folder path">
+                ${icons.folder}
+                <button class="folder-button" type="button" data-action="copy-folder" title="${escapeHtml(session.folder)}">${escapeHtml(session.folder)}</button>
+              </div>
+              <time class="updated" datetime="${escapeHtml(session.updatedAt)}">${escapeHtml(formatDate(session.updatedAt))}</time>
+              <button
+                class="button follow-up-button${session.followUp ? " is-follow-up" : ""}"
+                type="button"
+                data-action="follow-up"
+                aria-pressed="${String(Boolean(session.followUp))}"
+                title="${session.followUp ? "Remove from" : "Add to"} follow-up list"
+              >
+                ${icons.followUp}
+                ${session.followUp ? "Following" : "Follow up"}
+              </button>
+              <button class="button resume-button" type="button" data-action="resume" title="Copy ${escapeHtml(resumeCommand(session))}">
+                ${icons.copy}
+                Resume
+              </button>
+              <details class="row-menu">
+                <summary aria-label="Actions for ${escapeHtml(shownTitle)}">${icons.more}</summary>
+                <div class="menu-popover">
+                  <button type="button" data-action="rename">Rename</button>
+                  <button type="button" data-action="note">${session.followUpNote ? "Edit follow-up note" : "Add follow-up note"}</button>
+                  <button type="button" data-action="edit">Edit details</button>
+                  <button class="delete-action" type="button" data-action="delete">Delete</button>
+                </div>
+              </details>
+            </article>`;
+        }
+
+        function openForm(session = null) {
+          elements.sessionForm.reset();
+          elements.editingId.value = session?.id || "";
+          elements.dialogTitle.textContent = session ? "Edit session" : "Add a session";
+          elements.agentInput.value = session?.agent || "codex";
+          elements.updatedInput.value = session?.updatedAt || today();
+          elements.titleInput.value = session ? displayTitle(session) : "";
+          elements.aboutInput.value = session ? displayAbout(session) : "";
+          elements.folderInput.value = session?.folder || "";
+          elements.sessionIdInput.value = session?.sessionId || "";
+          updateCommandHint();
+          elements.sessionDialog.showModal();
+          requestAnimationFrame(() => elements.titleInput.focus());
+        }
+
+        function closeForm() {
+          elements.sessionDialog.close();
+        }
+
+        function openRename(session) {
+          elements.renamingId.value = session.id;
+          elements.renameInput.value = displayTitle(session);
+          elements.detectedNameHint.textContent = session.source === "scan"
+            ? `Detected name: ${session.title}`
+            : "This session was added manually.";
+          elements.resetNameButton.hidden = session.source !== "scan";
+          elements.renameDialog.showModal();
+          requestAnimationFrame(() => elements.renameInput.select());
+        }
+
+        function closeRename() {
+          elements.renameDialog.close();
+        }
+
+        function handleRename(event) {
+          event.preventDefault();
+          const session = state.sessions.find((item) => item.id === elements.renamingId.value);
+          const name = elements.renameInput.value.trim();
+          if (!session || !name) return;
+          if (session.source === "scan") session.customTitle = name === session.title ? "" : name;
+          else {
+            session.title = name;
+            session.customTitle = "";
+          }
+          saveSessions();
+          render();
+          closeRename();
+          showToast("Session renamed");
+        }
+
+        function openFollowUpNote(session) {
+          elements.notingId.value = session.id;
+          elements.noteInput.value = session.followUpNote || "";
+          elements.noteDialog.showModal();
+          requestAnimationFrame(() => elements.noteInput.focus());
+        }
+
+        function closeFollowUpNote() {
+          elements.noteDialog.close();
+        }
+
+        function handleFollowUpNote(event) {
+          event.preventDefault();
+          const session = state.sessions.find((item) => item.id === elements.notingId.value);
+          if (!session) return;
+          session.followUpNote = elements.noteInput.value.trim();
+          session.followUp = true;
+          saveSessions();
+          render();
+          closeFollowUpNote();
+          showToast(session.followUpNote ? "Follow-up note saved" : "Added to follow-up");
+        }
+
+        function updateCommandHint() {
+          const command = elements.agentInput.value === "codex" ? "codex resume <session-id>" : "claude --resume <session-id>";
+          elements.commandHint.textContent = `Creates: ${command}`;
+        }
+
+        function handleSubmit(event) {
+          event.preventDefault();
+          const existingId = elements.editingId.value;
+          const existing = state.sessions.find((item) => item.id === existingId);
+          const enteredTitle = elements.titleInput.value.trim();
+          const enteredAbout = elements.aboutInput.value.trim();
+          const isDiscovered = existing?.source === "scan";
+          const session = {
+            id: existingId || generateId(),
+            agent: elements.agentInput.value,
+            title: isDiscovered ? existing.title : enteredTitle,
+            about: isDiscovered ? existing.about : enteredAbout,
+            customTitle: isDiscovered && enteredTitle !== existing.title ? enteredTitle : "",
+            customAbout: isDiscovered && enteredAbout !== existing.about ? enteredAbout : "",
+            folder: elements.folderInput.value.trim(),
+            sessionId: elements.sessionIdInput.value.trim(),
+            updatedAt: elements.updatedInput.value,
+            activityAt: existing?.activityAt,
+            followUp: Boolean(existing?.followUp),
+            followUpNote: existing?.followUpNote || "",
+            source: existing?.source || "manual",
+            metadata: existing?.metadata || {},
+          };
+
+          if (!enteredTitle || !enteredAbout || !session.folder || !session.sessionId || !session.updatedAt) return;
+
+          const index = state.sessions.findIndex((item) => item.id === existingId);
+          if (index >= 0) state.sessions[index] = session;
+          else state.sessions.push(session);
+
+          saveSessions();
+          render();
+          closeForm();
+          showToast(existingId ? "Session updated" : "Session saved");
+        }
+
+        async function copyText(value, message) {
+          try {
+            await navigator.clipboard.writeText(value);
+          } catch {
+            const textArea = document.createElement("textarea");
+            textArea.value = value;
+            textArea.style.position = "fixed";
+            textArea.style.opacity = "0";
+            document.body.append(textArea);
+            textArea.select();
+            document.execCommand("copy");
+            textArea.remove();
+          }
+          showToast(message);
+        }
+
+        function showToast(message) {
+          const toast = document.createElement("div");
+          toast.className = "toast";
+          toast.innerHTML = `${icons.check}<span>${escapeHtml(message)}</span>`;
+          elements.toastRegion.append(toast);
+          window.setTimeout(() => toast.remove(), 2600);
+        }
+
+        function requestConfirmation({ title, message, buttonText, action }) {
+          elements.confirmTitle.textContent = title;
+          elements.confirmMessage.textContent = message;
+          elements.confirmButton.textContent = buttonText;
+          state.pendingAction = action;
+          elements.confirmDialog.showModal();
+        }
+
+        function handleSessionAction(event) {
+          const actionButton = event.target.closest("[data-action]");
+          if (!actionButton) return;
+          const row = actionButton.closest(".session-row");
+          const session = state.sessions.find((item) => item.id === row?.dataset.id);
+          if (!session) return;
+
+          const action = actionButton.dataset.action;
+          if (action === "resume") copyText(resumeCommand(session), `${session.agent === "codex" ? "Codex" : "Claude"} resume command copied`);
+          if (action === "copy-folder") copyText(session.folder, "Folder path copied");
+          if (action === "follow-up") {
+            const adding = !session.followUp;
+            session.followUp = adding;
+            saveSessions();
+            render();
+            if (adding) openFollowUpNote(session);
+            else showToast("Removed from follow-up");
+          }
+          if (action === "rename") openRename(session);
+          if (action === "note") openFollowUpNote(session);
+          if (action === "edit") openForm(session);
+          if (action === "delete") {
+            requestConfirmation({
+              title: "Delete this session?",
+              message: `“${displayTitle(session)}” will be removed from this browser.`,
+              buttonText: "Delete session",
+              action: () => {
+                state.sessions = state.sessions.filter((item) => item.id !== session.id);
+                saveSessions();
+                render();
+                showToast("Session deleted");
+              },
+            });
+          }
+          row.querySelector("details")?.removeAttribute("open");
+        }
+
+        async function syncSessions({ notify = true } = {}) {
+          if (state.scanning) return;
+          state.scanning = true;
+          elements.scanButton.disabled = true;
+          elements.scanButton.classList.add("scanning");
+          elements.scanButton.querySelector("span").textContent = "Scanning…";
+
+          try {
+            const response = await fetch("/api/sessions/scan", {
+              headers: { Accept: "application/json" },
+            });
+            if (!response.ok) throw new Error("Scan request failed");
+            const payload = await response.json();
+            const discovered = (Array.isArray(payload.sessions) ? payload.sessions : [])
+              .filter((session) =>
+                session &&
+                ["codex", "claude"].includes(session.agent) &&
+                typeof session.sessionId === "string" &&
+                typeof session.folder === "string" &&
+                typeof session.title === "string" &&
+                typeof session.about === "string" &&
+                typeof session.updatedAt === "string"
+              );
+            const existingByKey = new Map(state.sessions.map((session) => [sessionKey(session), session]));
+            let added = 0;
+            let changed = false;
+
+            for (const discoveredSession of discovered) {
+              const existing = existingByKey.get(sessionKey(discoveredSession));
+              if (existing) {
+                if (existing.source === "scan" && (discoveredSession.activityAt > (existing.activityAt || "") || !existing.metadata || Object.keys(existing.metadata).length === 0)) {
+                  const customTitle = existing.customTitle;
+                  const customAbout = existing.customAbout;
+                  const followUpNote = existing.followUpNote;
+                  Object.assign(existing, discoveredSession, {
+                    id: existing.id,
+                    followUp: existing.followUp,
+                    followUpNote,
+                    customTitle,
+                    customAbout,
+                    source: "scan",
+                  });
+                  changed = true;
+                }
+                continue;
+              }
+
+              const session = {
+                ...discoveredSession,
+                id: generateId(),
+                followUp: false,
+                followUpNote: "",
+                customTitle: "",
+                customAbout: "",
+                source: "scan",
+              };
+              state.sessions.push(session);
+              existingByKey.set(sessionKey(session), session);
+              added += 1;
+              changed = true;
+            }
+
+            if (changed) {
+              saveSessions();
+              render();
+            }
+
+            if (notify) {
+              showToast(added ? `${added} new session${added === 1 ? "" : "s"} added` : "Session list is up to date");
+            }
+          } catch (error) {
+            console.error(error);
+            if (notify) showToast("Scanning needs the local server: node serve.mjs");
+          } finally {
+            state.scanning = false;
+            elements.scanButton.disabled = false;
+            elements.scanButton.classList.remove("scanning");
+            elements.scanButton.querySelector("span").textContent = "Scan projects";
+          }
+        }
+
+        function exportSessions() {
+          const payload = JSON.stringify(state.sessions, null, 2);
+          const blob = new Blob([payload], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `agent-sessions-${today()}.json`;
+          link.click();
+          URL.revokeObjectURL(url);
+          showToast("Session backup exported");
+        }
+
+        async function importSessions(file) {
+          if (!file) return;
+          try {
+            const parsed = JSON.parse(await file.text());
+            if (!Array.isArray(parsed) || !parsed.every(isValidSession)) throw new Error("Invalid session file");
+            state.sessions = parsed.map(normalizeSession);
+            saveSessions();
+            render();
+            showToast(`${parsed.length} session${parsed.length === 1 ? "" : "s"} imported`);
+          } catch (error) {
+            showToast("That file is not a valid session backup");
+          } finally {
+            elements.importInput.value = "";
+          }
+        }
+
+        document.querySelectorAll("#topAddButton, #addButton, #emptyAddButton").forEach((button) => {
+          button.addEventListener("click", () => openForm());
+        });
+
+        document.querySelectorAll("#exportTopButton, #exportButton").forEach((button) => {
+          button.addEventListener("click", exportSessions);
+        });
+
+        elements.searchInput.addEventListener("input", (event) => {
+          state.query = event.target.value;
+          render();
+        });
+
+        elements.folderFilter.addEventListener("change", (event) => {
+          state.folder = event.target.value;
+          render();
+        });
+
+        elements.filterButtons.forEach((button) => {
+          button.addEventListener("click", () => {
+            state.filter = button.dataset.filter;
+            elements.filterButtons.forEach((item) => {
+              const active = item === button;
+              item.classList.toggle("active", active);
+              item.setAttribute("aria-pressed", String(active));
+            });
+            render();
+          });
+        });
+
+        elements.sessionList.addEventListener("click", handleSessionAction);
+        elements.scanButton.addEventListener("click", () => syncSessions({ notify: true }));
+        document.querySelectorAll("#privacyButton, #privacyLearnButton").forEach((button) => {
+          button.addEventListener("click", () => {
+            updatePrivacyUi();
+            elements.privacyDialog.showModal();
+          });
+        });
+        document.querySelector("#enableAutoScanButton").addEventListener("click", () => setAutoScan(true));
+        document.querySelector("#dismissPrivacyButton").addEventListener("click", () => setAutoScan(false));
+        document.querySelector("#closePrivacyButton").addEventListener("click", () => elements.privacyDialog.close());
+        elements.autoScanToggleButton.addEventListener("click", () => setAutoScan(!state.autoScan));
+        elements.privacyDialog.addEventListener("click", (event) => {
+          if (event.target === elements.privacyDialog) elements.privacyDialog.close();
+        });
+        elements.sessionForm.addEventListener("submit", handleSubmit);
+        elements.agentInput.addEventListener("change", updateCommandHint);
+        document.querySelector("#closeDialogButton").addEventListener("click", closeForm);
+        document.querySelector("#cancelButton").addEventListener("click", closeForm);
+        elements.sessionDialog.addEventListener("click", (event) => {
+          if (event.target === elements.sessionDialog) closeForm();
+        });
+        elements.renameForm.addEventListener("submit", handleRename);
+        document.querySelector("#closeRenameButton").addEventListener("click", closeRename);
+        document.querySelector("#cancelRenameButton").addEventListener("click", closeRename);
+        elements.resetNameButton.addEventListener("click", () => {
+          const session = state.sessions.find((item) => item.id === elements.renamingId.value);
+          if (!session || session.source !== "scan") return;
+          session.customTitle = "";
+          saveSessions();
+          render();
+          closeRename();
+          showToast("Detected name restored");
+        });
+        elements.renameDialog.addEventListener("click", (event) => {
+          if (event.target === elements.renameDialog) closeRename();
+        });
+        elements.noteForm.addEventListener("submit", handleFollowUpNote);
+        document.querySelector("#closeNoteButton").addEventListener("click", closeFollowUpNote);
+        document.querySelector("#cancelNoteButton").addEventListener("click", closeFollowUpNote);
+        elements.noteDialog.addEventListener("click", (event) => {
+          if (event.target === elements.noteDialog) closeFollowUpNote();
+        });
+
+        document.querySelector("#clearButton").addEventListener("click", () => {
+          if (state.sessions.length === 0) return showToast("There are no sessions to clear");
+          requestConfirmation({
+            title: "Clear all sessions?",
+            message: "This removes every saved session from this browser. Export first if you want a backup.",
+            buttonText: "Clear all",
+            action: () => {
+              state.sessions = [];
+              saveSessions();
+              render();
+              showToast("All sessions cleared");
+            },
+          });
+        });
+
+        document.querySelector("#cancelConfirmButton").addEventListener("click", () => {
+          state.pendingAction = null;
+          elements.confirmDialog.close();
+        });
+
+        elements.confirmButton.addEventListener("click", () => {
+          state.pendingAction?.();
+          state.pendingAction = null;
+          elements.confirmDialog.close();
+        });
+
+        elements.confirmDialog.addEventListener("click", (event) => {
+          if (event.target === elements.confirmDialog) {
+            state.pendingAction = null;
+            elements.confirmDialog.close();
+          }
+        });
+
+        elements.importInput.addEventListener("change", (event) => importSessions(event.target.files[0]));
+        render();
+        updatePrivacyUi();
+        loadServerConfig().then(() => {
+          if (state.autoScan) syncSessions({ notify: false });
+        });
+        window.setInterval(() => {
+          if (state.autoScan && !document.hidden) syncSessions({ notify: false });
+        }, 30_000);
+        document.addEventListener("visibilitychange", () => {
+          if (state.autoScan && !document.hidden) syncSessions({ notify: false });
+        });
+      })();
+    </script>
+  </body>
+</html>
