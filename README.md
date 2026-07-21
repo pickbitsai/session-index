@@ -1,5 +1,9 @@
 # Session Index
 
+<p align="center">
+  <img src="assets/session-index-mascot.png" width="180" alt="Session Index archivist robot mascot">
+</p>
+
 A small, dependency-free dashboard for finding, resuming, and following up on local Codex and Claude Code sessions.
 
 Session Index runs on your machine, listens only on localhost, and has no telemetry, account, cloud database, remote assets, or third-party requests. Local discovery is opt-in on first run.

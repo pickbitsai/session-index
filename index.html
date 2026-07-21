@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="./assets/session-index-mascot.png" />
     <meta
       name="description"
       content="A small, local-first tracker for Codex and Claude Code sessions."
@@ -96,32 +97,13 @@
         letter-spacing: -0.02em;
       }
 
-      .brand-mark {
-        position: relative;
-        width: 29px;
-        height: 29px;
-        border: 1.5px solid var(--ink);
-        border-radius: 9px;
-      }
-
-      .brand-mark::before,
-      .brand-mark::after {
-        position: absolute;
-        left: 6px;
-        right: 6px;
-        height: 1.5px;
-        border-radius: 2px;
-        background: var(--ink);
-        content: "";
-      }
-
-      .brand-mark::before {
-        top: 9px;
-      }
-
-      .brand-mark::after {
-        top: 16px;
-        right: 11px;
+      .brand-mascot {
+        width: 38px;
+        height: 38px;
+        border: 1px solid rgba(24, 33, 29, 0.18);
+        border-radius: 11px;
+        object-fit: cover;
+        box-shadow: 0 5px 14px rgba(20, 34, 27, 0.12);
       }
 
       .top-actions {
@@ -1154,7 +1136,7 @@
     <main class="page-shell">
       <header class="topbar">
         <div class="brand" aria-label="Session Index home">
-          <span class="brand-mark" aria-hidden="true"></span>
+          <img class="brand-mascot" src="./assets/session-index-mascot.png" alt="" />
           <span>Session Index</span>
         </div>
         <div class="top-actions">
