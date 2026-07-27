@@ -22,7 +22,15 @@ Open `http://127.0.0.1:4173`, review the privacy explanation, then choose a manu
 
 - Discovers Codex and Claude Code sessions whose recorded working directory is under the configured project root.
 - Copies the correct resume command: `codex resume <id>` or `claude --resume <id>`.
-- Filters by agent, project folder, follow-up status, and search text.
+- Filters by agent, project folder, follow-up status, review-queue status, and search text.
+- **Mission control**: states the standing routing objective (Claude plans/reviews, paid-for engines execute,
+  downsize checkpoint Aug 19, 2026) and meters each engine's 7-day utilization — Claude token load and
+  Fable/Opus share, Codex weekly-quota percentage (read from the newest local rollout's rate-limit snapshot),
+  a manual Jules task counter, and local Ollama model status. Utilization is numbers-only: no prompt text is
+  read into the metering results.
+- **Routing lens**: flags "off-plan" sessions (long execution loops running on a planning-tier Claude model)
+  directly in the session list.
+- **Review queue**: mark any session "awaiting review" so executor output waits in a visible inbox.
 - Lets you rename a session and replace its generated summary without losing those edits on the next scan.
 - Stores a private next-step note with any follow-up session.
 - Shows available local metadata such as model, context usage, log size, effort, branch, and turn/message count.
@@ -31,6 +39,12 @@ Open `http://127.0.0.1:4173`, review the privacy explanation, then choose a manu
 ## Where discovery looks
 
 By default, Windows projects are filtered to `C:\new`; other platforms use `~/new`. Session logs are read from:
+
+> **Metering scope note:** the Mission Control utilization endpoint (`/api/usage`) aggregates token counts
+> across the **full** local Codex and Claude stores (subscription caps are account-wide, so partial metering
+> would mislead). It extracts numbers, model names, timestamps, and rate-limit snapshots only — never prompt
+> text. It also probes Ollama at `127.0.0.1:11434` (override with `OLLAMA_HOST_URL`); that is a same-machine
+> request, and the app still makes no network requests.
 
 - Codex: `%USERPROFILE%\.codex\sessions` (or `$CODEX_HOME/sessions`)
 - Claude Code: `%USERPROFILE%\.claude\projects` (or `$CLAUDE_CONFIG_DIR/projects`)

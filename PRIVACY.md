@@ -15,9 +15,18 @@ The response excludes sessions whose recorded working directory is outside `SESS
 
 For Codex, the detected summary is the first useful user prompt. For Claude Code, it prefers the provider's `last-prompt` record and otherwise uses the first useful user prompt. Environment and setup wrappers are filtered out.
 
+## What the utilization endpoint reads
+
+The Mission Control panel (`/api/usage`) streams the **full** local Codex and Claude stores — not just
+`SESSION_SCAN_ROOT` — because subscription limits are account-wide and partial numbers would mislead. It
+extracts only token counts, model names, message timestamps, project folder names, and Codex rate-limit
+snapshots. No prompt or response text is parsed into its results. It also probes a local Ollama instance at
+`127.0.0.1:11434` (models installed and running); this is a same-machine request. Utilization aggregates are
+kept in server memory, not written to disk.
+
 ## What the browser stores
 
-Saved sessions, detected excerpts, custom names and summaries, follow-up state, and follow-up notes are stored in browser localStorage under `session-index.sessions.v1`. The auto-scan choice is stored under `session-index.auto-scan.v1`.
+Saved sessions, detected excerpts, custom names and summaries, follow-up state, review-queue state, and follow-up notes are stored in browser localStorage under `session-index.sessions.v1`. The auto-scan choice is stored under `session-index.auto-scan.v1`, and the manual Jules weekly task count under `session-index.jules-tasks.v1`.
 
 Use **Clear all** to remove saved session data from the app. Browser site-data controls can remove both keys. A manual scan remains available when auto-scan is disabled.
 

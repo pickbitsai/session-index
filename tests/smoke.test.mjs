@@ -135,6 +135,20 @@ test("exposes local configuration and parses synthetic provider metadata", async
   assert.equal(claude.metadata.contextTokens, 60);
 });
 
+test("serves engine utilization with the expected shape", async () => {
+  const response = await httpRequest("/api/usage?days=7");
+  assert.equal(response.status, 200);
+  const usage = JSON.parse(response.body);
+  assert.equal(usage.windowDays, 7);
+  assert.ok(usage.claude);
+  assert.ok(Array.isArray(usage.claude.byDay));
+  assert.equal(usage.claude.byDay.length, 7);
+  assert.ok(usage.codex);
+  assert.ok(Array.isArray(usage.codex.byDay));
+  assert.ok(usage.ollama);
+  assert.equal(typeof usage.ollama.available, "boolean");
+});
+
 test("rejects non-local hosts, non-GET methods, and traversal", async () => {
   assert.equal((await httpRequest("/", { hostHeader: "example.com" })).status, 403);
   assert.equal((await httpRequest("/api/health", { method: "POST" })).status, 405);

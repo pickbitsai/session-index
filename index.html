@@ -931,6 +931,303 @@
         }
       }
 
+      .mission {
+        padding: 18px 20px 16px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(250, 249, 244, 0.72);
+      }
+
+      .mission-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+      }
+
+      .mission-head h2 {
+        margin: 0 0 4px;
+        font-size: 0.95rem;
+        letter-spacing: -0.015em;
+      }
+
+      .mission-objective {
+        max-width: 660px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.78rem;
+        line-height: 1.55;
+      }
+
+      .mission-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 6px;
+      }
+
+      .checkpoint-chip {
+        padding: 5px 10px;
+        border: 1px solid #d9bd70;
+        border-radius: 999px;
+        color: #735f27;
+        background: var(--amber-soft);
+        font-size: 0.7rem;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .usage-status {
+        color: var(--soft-muted);
+        font-size: 0.68rem;
+        text-align: right;
+      }
+
+      .lane-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 14px;
+      }
+
+      .lane-offline {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        grid-column: 1 / -1;
+        padding: 14px 16px;
+        border: 1px dashed var(--line-dark);
+        border-radius: 11px;
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .lane-card {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px 13px 12px;
+        border: 1px solid var(--line);
+        border-top: 3px solid var(--lane, var(--line-dark));
+        border-radius: 11px;
+        background: var(--surface);
+      }
+
+      .lane-card h3 {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        margin: 0;
+        font-size: 0.8rem;
+        letter-spacing: -0.01em;
+      }
+
+      .lane-engine {
+        overflow: hidden;
+        color: var(--soft-muted);
+        font-family: var(--mono);
+        font-size: 0.62rem;
+        font-weight: 400;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .lane-role {
+        min-height: 32px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.7rem;
+        line-height: 1.45;
+      }
+
+      .lane-hero {
+        display: flex;
+        align-items: baseline;
+        gap: 7px;
+      }
+
+      .lane-hero strong {
+        font-size: 1.28rem;
+        letter-spacing: -0.02em;
+      }
+
+      .lane-hero span {
+        color: var(--soft-muted);
+        font-size: 0.66rem;
+      }
+
+      .lane-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px 10px;
+        margin: 0;
+        color: var(--soft-muted);
+        font-family: var(--mono);
+        font-size: 0.64rem;
+        line-height: 1.4;
+      }
+
+      .lane-bars {
+        display: flex;
+        align-items: flex-end;
+        gap: 2px;
+        height: 34px;
+        margin-top: 2px;
+      }
+
+      .lane-bars span {
+        flex: 1;
+        min-width: 3px;
+        border-radius: 2px 2px 0 0;
+        background: var(--lane);
+        opacity: 0.85;
+      }
+
+      .lane-bars span:hover {
+        opacity: 1;
+      }
+
+      .lane-status {
+        display: inline-flex;
+        width: fit-content;
+        align-items: center;
+        gap: 6px;
+        margin-top: auto;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-size: 0.66rem;
+        font-weight: 750;
+      }
+
+      .lane-status.good {
+        color: var(--green);
+        background: var(--green-soft);
+      }
+
+      .lane-status.warn {
+        color: var(--amber);
+        background: var(--amber-soft);
+      }
+
+      .lane-status.bad {
+        color: var(--danger);
+        background: #f7e2df;
+      }
+
+      .lane-status.idle {
+        color: var(--muted);
+        background: #ecece5;
+      }
+
+      .lane-detail summary {
+        color: var(--muted);
+        font-size: 0.66rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .lane-detail ul {
+        margin: 6px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .lane-detail li {
+        padding: 3px 0;
+        border-top: 1px dashed var(--line);
+        color: var(--muted);
+        font-family: var(--mono);
+        font-size: 0.62rem;
+      }
+
+      .jules-edit {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .jules-edit input {
+        width: 64px;
+        height: 30px;
+        padding: 0 8px;
+        border: 1px solid var(--line-dark);
+        border-radius: 8px;
+        color: var(--ink);
+        background: #fff;
+        font-size: 0.8rem;
+      }
+
+      .jules-edit label {
+        color: var(--soft-muted);
+        font-size: 0.66rem;
+      }
+
+      .mission-rules {
+        margin: 12px 0 0;
+        color: var(--soft-muted);
+        font-size: 0.68rem;
+        line-height: 1.6;
+      }
+
+      .mission-rules strong {
+        color: var(--muted);
+      }
+
+      .row-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 0 0 6px;
+      }
+
+      .row-chip {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 0.62rem;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+      }
+
+      .row-chip.review {
+        border: 1px solid #d9bd70;
+        color: #735f27;
+        background: var(--amber-soft);
+      }
+
+      .row-chip.offplan {
+        border: 1px solid rgba(158, 53, 45, 0.25);
+        color: var(--danger);
+        background: #f7e2df;
+      }
+
+      @media (max-width: 980px) {
+        .lane-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .mission-head {
+          flex-direction: column;
+        }
+
+        .mission-meta {
+          flex-direction: row;
+          align-items: center;
+        }
+
+        .usage-status {
+          text-align: left;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .lane-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
       @media (max-width: 980px) {
         .table-head,
         .session-row {
@@ -1178,6 +1475,31 @@
             <button class="button primary" id="enableAutoScanButton" type="button">Enable auto-scan</button>
           </div>
         </aside>
+        <section class="mission" id="missionPanel" aria-labelledby="missionTitle">
+          <div class="mission-head">
+            <div>
+              <h2 id="missionTitle">Mission control — engine routing</h2>
+              <p class="mission-objective">
+                <strong>Objective:</strong> stop hitting Claude caps. Claude is the brain — it plans, reviews,
+                and judges; the engines we already pay for do the execution. Every subscription proves its tier
+                with real utilization by <strong>Aug 19, 2026</strong> or it gets downsized.
+              </p>
+            </div>
+            <div class="mission-meta">
+              <span class="checkpoint-chip">Downsize checkpoint · Aug 19</span>
+              <span class="usage-status" id="usageStatus">Metering not loaded</span>
+            </div>
+          </div>
+          <div class="lane-grid" id="laneGrid"></div>
+          <p class="mission-rules">
+            Decision rules — <strong>Claude Max 20×:</strong> Fable/Opus for planning &amp; review turns only, never
+            execution loops; two straight weeks under 25% of cap → drop to Max 5×.
+            <strong>GPT Pro:</strong> Codex is the default interactive workhorse; under 40% weekly utilization at the
+            checkpoint → drop to the $100 5× tier.
+            <strong>Google AI Pro:</strong> stays while Jules (target ≥25 tasks/wk) or NotebookLM earns it.
+            <strong>Local 3080 Ti:</strong> overnight batch lanes only, behind validators — never the interactive executor.
+          </p>
+        </section>
         <div class="toolbar">
           <div class="toolbar-left">
             <label class="search">
@@ -1209,6 +1531,7 @@
               <button class="filter-button" type="button" data-filter="codex" aria-pressed="false">Codex</button>
               <button class="filter-button" type="button" data-filter="claude" aria-pressed="false">Claude</button>
               <button class="filter-button" type="button" data-filter="followup" aria-pressed="false">Follow up</button>
+              <button class="filter-button" type="button" data-filter="review" aria-pressed="false">Review</button>
             </div>
             <button class="button primary" id="addButton" type="button">
               <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1421,6 +1744,7 @@
 
         const STORAGE_KEY = "session-index.sessions.v1";
         const SCAN_PREF_KEY = "session-index.auto-scan.v1";
+        const JULES_KEY = "session-index.jules-tasks.v1";
         const initialSessions = loadSessions();
         const storedScanPreference = readScanPreference();
         const state = {
@@ -1433,9 +1757,14 @@
           autoScan: storedScanPreference === "enabled",
           privacyDismissed: storedScanPreference === "disabled",
           scanRoot: "your project root",
+          usage: null,
+          usageLoading: false,
+          usageError: false,
         };
 
         const elements = {
+          laneGrid: document.querySelector("#laneGrid"),
+          usageStatus: document.querySelector("#usageStatus"),
           sessionList: document.querySelector("#sessionList"),
           emptyState: document.querySelector("#emptyState"),
           emptyTitle: document.querySelector("#emptyTitle"),
@@ -1526,12 +1855,24 @@
           return {
             ...session,
             followUp: Boolean(session.followUp),
+            queue: session.queue === "review" ? "review" : "",
             source: session.source === "scan" ? "scan" : "manual",
             customTitle: typeof session.customTitle === "string" ? session.customTitle : "",
             customAbout: typeof session.customAbout === "string" ? session.customAbout : "",
             followUpNote: typeof session.followUpNote === "string" ? session.followUpNote : "",
             metadata: session.metadata && typeof session.metadata === "object" ? session.metadata : {},
           };
+        }
+
+        // The routing lens: a Claude session whose latest model is a
+        // planning-tier model (Fable/Opus) but whose length looks like an
+        // execution loop is off-plan per the mission rules above.
+        function isOffPlan(session) {
+          if (session.agent !== "claude") return false;
+          const model = session.metadata?.model || "";
+          if (!/opus|fable/i.test(model)) return false;
+          const length = session.metadata?.turns ?? session.metadata?.messages ?? 0;
+          return length >= 40;
         }
 
         function displayTitle(session) {
@@ -1690,6 +2031,7 @@
               if (state.folder !== "all" && session.folder !== state.folder) return false;
               if (state.filter === "all") return true;
               if (state.filter === "followup") return session.followUp;
+              if (state.filter === "review") return session.queue === "review";
               return session.agent === state.filter;
             })
             .filter((session) => {
@@ -1722,11 +2064,14 @@
           const sessions = filteredSessions();
           const total = state.sessions.length;
           const followUpTotal = state.sessions.filter((session) => session.followUp).length;
+          const reviewTotal = state.sessions.filter((session) => session.queue === "review").length;
           elements.sessionList.innerHTML = sessions.map(sessionRow).join("");
           const allFilter = elements.filterButtons.find((button) => button.dataset.filter === "all");
           const followUpFilter = elements.filterButtons.find((button) => button.dataset.filter === "followup");
+          const reviewFilter = elements.filterButtons.find((button) => button.dataset.filter === "review");
           if (allFilter) allFilter.textContent = `All${total ? ` ${total}` : ""}`;
           if (followUpFilter) followUpFilter.textContent = `Follow up${followUpTotal ? ` ${followUpTotal}` : ""}`;
+          if (reviewFilter) reviewFilter.textContent = `Review${reviewTotal ? ` ${reviewTotal}` : ""}`;
 
           const noResults = total > 0 && sessions.length === 0;
           elements.emptyState.classList.toggle("visible", sessions.length === 0);
@@ -1742,9 +2087,15 @@
           const shownTitle = displayTitle(session);
           const shownAbout = displayAbout(session);
           const shownMetadata = metadataItems(session);
+          const chips = [];
+          if (session.queue === "review") chips.push('<span class="row-chip review">Needs review</span>');
+          if (isOffPlan(session)) {
+            chips.push('<span class="row-chip offplan" title="Long execution loop on a planning-tier model (Fable/Opus). Mission rule: route these to Codex or Sonnet.">Off-plan model</span>');
+          }
           return `
             <article class="session-row" data-id="${escapeHtml(session.id)}">
               <div class="session-main">
+                ${chips.length ? `<div class="row-chips">${chips.join("")}</div>` : ""}
                 <h2 class="session-title" title="${escapeHtml(shownTitle)}">${escapeHtml(shownTitle)}</h2>
                 <p class="session-about">${escapeHtml(shownAbout)}</p>
                 ${shownMetadata.length ? `<div class="session-metadata" aria-label="Session metadata">${shownMetadata.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>` : ""}
@@ -1774,6 +2125,7 @@
                 <summary aria-label="Actions for ${escapeHtml(shownTitle)}">${icons.more}</summary>
                 <div class="menu-popover">
                   <button type="button" data-action="rename">Rename</button>
+                  <button type="button" data-action="toggle-review">${session.queue === "review" ? "Clear review flag" : "Mark awaiting review"}</button>
                   <button type="button" data-action="note">${session.followUpNote ? "Edit follow-up note" : "Add follow-up note"}</button>
                   <button type="button" data-action="edit">Edit details</button>
                   <button class="delete-action" type="button" data-action="delete">Delete</button>
@@ -1879,6 +2231,7 @@
             updatedAt: elements.updatedInput.value,
             activityAt: existing?.activityAt,
             followUp: Boolean(existing?.followUp),
+            queue: existing?.queue || "",
             followUpNote: existing?.followUpNote || "",
             source: existing?.source || "manual",
             metadata: existing?.metadata || {},
@@ -1947,6 +2300,12 @@
             else showToast("Removed from follow-up");
           }
           if (action === "rename") openRename(session);
+          if (action === "toggle-review") {
+            session.queue = session.queue === "review" ? "" : "review";
+            saveSessions();
+            render();
+            showToast(session.queue === "review" ? "Waiting in the review queue" : "Review flag cleared");
+          }
           if (action === "note") openFollowUpNote(session);
           if (action === "edit") openForm(session);
           if (action === "delete") {
@@ -2016,6 +2375,7 @@
                 ...discoveredSession,
                 id: generateId(),
                 followUp: false,
+                queue: "",
                 followUpNote: "",
                 customTitle: "",
                 customAbout: "",
@@ -2043,6 +2403,194 @@
             elements.scanButton.disabled = false;
             elements.scanButton.classList.remove("scanning");
             elements.scanButton.querySelector("span").textContent = "Scan projects";
+          }
+        }
+
+        // ---- Mission control: engine utilization metering ----
+
+        const LANES = {
+          claude: { accent: "#d06716", name: "Claude", engine: "Claude Max 20×", role: "The brain. Plans, reviews, judges. Sonnet by default; Fable/Opus only to author plans and review packets." },
+          codex: { accent: "#0f7a55", name: "Codex", engine: "gpt-5.6-sol · GPT Pro", role: "The workhorse. Interactive execution: UE5 MCP loops, game-dev chores, warehouse build steps." },
+          jules: { accent: "#2b6cb8", name: "Jules", engine: "jules.google · AI Pro", role: "The chore queue. Async repo tasks across the game repos; PRs come back to Claude for review." },
+          local: { accent: "#8a6a1a", name: "Local GPU", engine: "Ollama · RTX 3080 Ti", role: "The batch engine. Overnight text lanes behind validators — never the interactive executor." },
+        };
+
+        function currentWeekStart() {
+          const date = new Date();
+          const daysPastMonday = (date.getDay() + 6) % 7;
+          const monday = new Date(date.getFullYear(), date.getMonth(), date.getDate() - daysPastMonday);
+          return new Date(monday.getTime() - monday.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+        }
+
+        function loadJulesCount() {
+          try {
+            const raw = JSON.parse(localStorage.getItem(JULES_KEY));
+            if (raw && raw.weekStart === currentWeekStart() && Number.isFinite(raw.count)) return raw.count;
+          } catch {
+            // Fall through to zero.
+          }
+          return 0;
+        }
+
+        function saveJulesCount(count) {
+          try {
+            localStorage.setItem(JULES_KEY, JSON.stringify({ weekStart: currentWeekStart(), count }));
+          } catch (error) {
+            console.warn("Could not save the Jules count", error);
+          }
+        }
+
+        function statusChip(kind, text) {
+          return `<span class="lane-status ${kind}">${escapeHtml(text)}</span>`;
+        }
+
+        function laneBars(days, makeTitle) {
+          const max = Math.max(...days.map((day) => day.totalTokens), 1);
+          const bars = days
+            .map((day) => {
+              const height = day.totalTokens > 0 ? Math.max(6, Math.round((day.totalTokens / max) * 100)) : 2;
+              return `<span style="height:${height}%" title="${escapeHtml(makeTitle(day))}"></span>`;
+            })
+            .join("");
+          return `<div class="lane-bars">${bars}</div>`;
+        }
+
+        function laneCard(laneKey, body) {
+          const lane = LANES[laneKey];
+          return `
+            <article class="lane-card" style="--lane:${lane.accent}" aria-label="${escapeHtml(lane.name)} lane">
+              <h3>${escapeHtml(lane.name)} <span class="lane-engine" title="${escapeHtml(lane.engine)}">${escapeHtml(lane.engine)}</span></h3>
+              <p class="lane-role">${escapeHtml(lane.role)}</p>
+              ${body}
+            </article>`;
+        }
+
+        function claudeCard(claude) {
+          const share = Math.round((claude.expensiveShare || 0) * 100);
+          const status = share <= 25
+            ? statusChip("good", `on plan · Fable/Opus ${share}% of load`)
+            : share <= 50
+              ? statusChip("warn", `drifting · Fable/Opus ${share}% of load`)
+              : statusChip("bad", `off plan · Fable/Opus ${share}% of load`);
+          const modelBits = Object.entries(claude.byModel || {})
+            .slice(0, 3)
+            .map(([family, model]) => `${family} $${model.costUsd.toLocaleString()}`);
+          const violations = claude.violationCount
+            ? `<details class="lane-detail"><summary>${claude.violationCount} heavy Fable/Opus session${claude.violationCount === 1 ? "" : "s"} this week</summary><ul>${claude.violations
+                .map((violation) => `<li>${escapeHtml(violation.project)} · ${violation.expensiveMsgs} expensive turns · $${violation.costUsd.toLocaleString()}</li>`)
+                .join("")}</ul></details>`
+            : "";
+          return laneCard(
+            "claude",
+            `<div class="lane-hero"><strong>$${claude.costUsd.toLocaleString()}</strong><span>7-day API-equivalent</span></div>
+             <p class="lane-stats"><span>${escapeHtml(compactNumber(claude.totalTokens))} tok</span><span>${claude.sessions} sessions</span><span>${claude.assistantMsgs.toLocaleString()} msgs</span>${modelBits.map((bit) => `<span>${escapeHtml(bit)}</span>`).join("")}</p>
+             ${laneBars(claude.byDay, (day) => `${day.date} · ${compactNumber(day.totalTokens)} tokens · $${day.costUsd.toLocaleString()} equiv`)}
+             ${violations}
+             ${status}`,
+          );
+        }
+
+        function codexCard(codex) {
+          const rateLimit = codex.rateLimit;
+          const percent = rateLimit ? Math.round(rateLimit.usedPercent) : null;
+          const status = percent === null
+            ? statusChip("idle", "no quota snapshot yet — run a Codex turn")
+            : percent >= 40
+              ? statusChip("good", `earning its tier · ${percent}% of weekly quota`)
+              : percent >= 10
+                ? statusChip("warn", `below the 40% target · route more work here`)
+                : statusChip("bad", "nearly idle · this is the default workhorse");
+          const stats = [
+            `${codex.sessions} sessions`,
+            `${codex.turns} turns`,
+            `${compactNumber(codex.totalTokens)} tok`,
+            ...(codex.models.length ? [codex.models.join(", ")] : []),
+            ...(rateLimit?.planType ? [`plan ${rateLimit.planType}`] : []),
+            ...(rateLimit ? [`snapshot ${formatDate(rateLimit.capturedAt.slice(0, 10))}`] : []),
+          ];
+          return laneCard(
+            "codex",
+            `<div class="lane-hero"><strong>${percent === null ? "—" : `${percent}%`}</strong><span>of weekly quota used</span></div>
+             <p class="lane-stats">${stats.map((stat) => `<span>${escapeHtml(stat)}</span>`).join("")}</p>
+             ${laneBars(codex.byDay, (day) => `${day.date} · ${compactNumber(day.totalTokens)} tokens · ${day.turns} turns`)}
+             ${status}`,
+          );
+        }
+
+        function julesCard() {
+          const count = loadJulesCount();
+          const status = count >= 25
+            ? statusChip("good", "earning the $20 tier")
+            : count > 0
+              ? statusChip("warn", "below the 25/week target")
+              : statusChip("bad", "unused · 100 tasks/day sitting idle");
+          return laneCard(
+            "jules",
+            `<div class="lane-hero"><strong>${count}</strong><span>tasks logged this week</span></div>
+             <div class="jules-edit"><label for="julesInput">This week:</label><input id="julesInput" type="number" min="0" max="700" value="${count}" aria-label="Jules tasks completed this week" /></div>
+             <p class="lane-stats"><span>quota 100/day on AI Pro</span><span>manual count · resets Monday</span></p>
+             ${status}`,
+          );
+        }
+
+        function localCard(ollama) {
+          const status = !ollama?.available
+            ? statusChip("idle", "Ollama not running")
+            : ollama.running.length
+              ? statusChip("good", `batch running · ${ollama.running.join(", ")}`)
+              : statusChip("idle", "loaded, idle · batch lanes only");
+          const models = (ollama?.models || [])
+            .slice(0, 3)
+            .map((model) => `${model.name}${model.sizeGb ? ` ${model.sizeGb}GB` : ""}`);
+          return laneCard(
+            "local",
+            `<div class="lane-hero"><strong>${ollama?.available ? ollama.models.length : 0}</strong><span>models installed</span></div>
+             <p class="lane-stats">${models.map((model) => `<span>${escapeHtml(model)}</span>`).join("") || "<span>pull a model to begin</span>"}<span>serialize vs SDXL (keep_alive 0)</span></p>
+             ${status}`,
+          );
+        }
+
+        function renderMission() {
+          if (!elements.laneGrid) return;
+          if (!state.usage) {
+            elements.usageStatus.textContent = state.usageLoading
+              ? "Computing 7-day utilization… first pass reads the recent local logs"
+              : state.usageError
+                ? "Metering needs the local server: node serve.mjs"
+                : "Metering not loaded";
+            elements.laneGrid.innerHTML = `
+              <div class="lane-offline">
+                <span>Engine utilization is computed from your local Codex and Claude logs — numbers only, no prompt text.</span>
+                <button class="button" id="usageComputeButton" type="button" ${state.usageLoading ? "disabled" : ""}>${state.usageLoading ? "Computing…" : "Compute utilization"}</button>
+              </div>`;
+            return;
+          }
+          const generated = new Date(state.usage.generatedAt);
+          elements.usageStatus.textContent = `7-day window · updated ${generated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+          elements.laneGrid.innerHTML = [
+            claudeCard(state.usage.claude),
+            codexCard(state.usage.codex),
+            julesCard(),
+            localCard(state.usage.ollama),
+          ].join("");
+        }
+
+        async function fetchUsage({ notify = false } = {}) {
+          if (state.usageLoading) return;
+          state.usageLoading = true;
+          renderMission();
+          try {
+            const response = await fetch("/api/usage?days=7", { headers: { Accept: "application/json" } });
+            if (!response.ok) throw new Error("Usage request failed");
+            state.usage = await response.json();
+            state.usageError = false;
+          } catch (error) {
+            console.error(error);
+            state.usageError = true;
+            if (notify) showToast("Metering needs the local server: node serve.mjs");
+          } finally {
+            state.usageLoading = false;
+            renderMission();
           }
         }
 
@@ -2105,7 +2653,21 @@
         });
 
         elements.sessionList.addEventListener("click", handleSessionAction);
-        elements.scanButton.addEventListener("click", () => syncSessions({ notify: true }));
+        elements.laneGrid.addEventListener("click", (event) => {
+          if (event.target.closest("#usageComputeButton")) fetchUsage({ notify: true });
+        });
+        elements.laneGrid.addEventListener("change", (event) => {
+          const input = event.target.closest("#julesInput");
+          if (!input) return;
+          const count = Math.max(0, Math.min(700, Math.round(Number(input.value) || 0)));
+          saveJulesCount(count);
+          renderMission();
+          showToast(`Jules: ${count} task${count === 1 ? "" : "s"} logged this week`);
+        });
+        elements.scanButton.addEventListener("click", () => {
+          syncSessions({ notify: true });
+          fetchUsage({ notify: false });
+        });
         document.querySelectorAll("#privacyButton, #privacyLearnButton").forEach((button) => {
           button.addEventListener("click", () => {
             updatePrivacyUi();
@@ -2183,15 +2745,25 @@
 
         elements.importInput.addEventListener("change", (event) => importSessions(event.target.files[0]));
         render();
+        renderMission();
         updatePrivacyUi();
         loadServerConfig().then(() => {
-          if (state.autoScan) syncSessions({ notify: false });
+          if (state.autoScan) {
+            syncSessions({ notify: false });
+            fetchUsage();
+          }
         });
         window.setInterval(() => {
           if (state.autoScan && !document.hidden) syncSessions({ notify: false });
         }, 30_000);
+        window.setInterval(() => {
+          if (state.autoScan && !document.hidden) fetchUsage();
+        }, 60_000);
         document.addEventListener("visibilitychange", () => {
-          if (state.autoScan && !document.hidden) syncSessions({ notify: false });
+          if (state.autoScan && !document.hidden) {
+            syncSessions({ notify: false });
+            fetchUsage();
+          }
         });
       })();
     </script>

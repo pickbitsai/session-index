@@ -11,6 +11,7 @@ import {
   relative,
   resolve,
 } from "node:path";
+import { createUsageScanner } from "./usage.mjs";
 
 const host = "127.0.0.1";
 const port = Number(process.env.PORT || 4173);
@@ -28,6 +29,8 @@ const mimeTypes = {
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
 };
+const usageScanner = createUsageScanner({ codexStore, claudeStore });
+const ollamaBase = process.env.OLLAMA_HOST_URL || "http://127.0.0.1:11434";
 const securityHeaders = {
   "Content-Security-Policy": "default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'none'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
   "Cross-Origin-Resource-Policy": "same-origin",
@@ -335,6 +338,30 @@ async function scanSessions() {
     .slice(0, scanLimit);
 }
 
+// Local-machine probe only (127.0.0.1 Ollama). Never a network request.
+async function probeOllama() {
+  const get = async (path) => {
+    const response = await fetch(`${ollamaBase}${path}`, { signal: AbortSignal.timeout(600) });
+    if (!response.ok) throw new Error(`Ollama ${path} ${response.status}`);
+    return response.json();
+  };
+  try {
+    const [tags, ps] = await Promise.all([get("/api/tags"), get("/api/ps")]);
+    return {
+      available: true,
+      models: (tags.models || []).map((model) => ({
+        name: model.name,
+        sizeGb: model.size ? Number((model.size / 1e9).toFixed(1)) : null,
+      })),
+      running: (ps.models || []).map((model) => model.name),
+    };
+  } catch {
+    return { available: false, models: [], running: [] };
+  }
+}
+
+let usageInFlight = null;
+
 function sendJson(response, statusCode, payload) {
   response.writeHead(statusCode, {
     ...securityHeaders,
@@ -393,6 +420,23 @@ createServer(async (request, response) => {
     } catch (error) {
       console.error("Session scan failed", error);
       sendJson(response, 500, { error: "Could not scan the local agent session stores." });
+    }
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/usage") {
+    try {
+      const days = Math.min(30, Math.max(1, Number(url.searchParams.get("days")) || 7));
+      // Concurrent requests share one scan; the incremental cache makes
+      // follow-up scans cheap, but the first one reads the recent stores.
+      usageInFlight ||= usageScanner
+        .scan(days)
+        .finally(() => { usageInFlight = null; });
+      const [usage, ollama] = await Promise.all([usageInFlight, probeOllama()]);
+      sendJson(response, 200, { ...usage, ollama });
+    } catch (error) {
+      console.error("Usage scan failed", error);
+      sendJson(response, 500, { error: "Could not compute engine utilization." });
     }
     return;
   }
