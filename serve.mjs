@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createReadStream, statSync } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -11,7 +13,9 @@ import {
   relative,
   resolve,
 } from "node:path";
+import { countPosixAgentProcesses, countWindowsAgentProcesses } from "./processes.mjs";
 import { createUsageScanner } from "./usage.mjs";
+import { matchWindowsToSessions, parseVisibleWindowsProbeOutput } from "./windows.mjs";
 
 const host = "127.0.0.1";
 const port = Number(process.env.PORT || 4173);
@@ -19,13 +23,22 @@ const root = process.cwd();
 const profileRoot = process.env.USERPROFILE || homedir();
 const defaultScanRoot = process.platform === "win32" ? "C:\\new" : join(homedir(), "new");
 const scanRoot = resolve(process.env.SESSION_SCAN_ROOT || defaultScanRoot);
-const scanLimit = Math.min(250, Math.max(1, Number(process.env.SESSION_SCAN_LIMIT || 80)));
+const scanLimit = clampSessionLimit(process.env.SESSION_SCAN_LIMIT, 80, 250);
+const lookupLimit = clampSessionLimit(process.env.SESSION_LOOKUP_LIMIT, 500, 2_000);
 const codexStore = process.env.CODEX_HOME || join(profileRoot, ".codex");
 const claudeStore = process.env.CLAUDE_CONFIG_DIR || join(profileRoot, ".claude");
+// SESSION_LAUNCH: "on" (default) | "off" | "dry-run" (validate + return the command, spawn nothing)
+const launchMode = ["off", "dry-run"].includes(String(process.env.SESSION_LAUNCH || "").toLowerCase())
+  ? String(process.env.SESSION_LAUNCH).toLowerCase()
+  : "on";
+// Per-process CSRF token. The page reads it from /api/config (same-origin only) and must
+// echo it on POST, so no other origin can reach the process-spawning endpoint.
+const launchToken = randomUUID();
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
 };
@@ -39,6 +52,13 @@ const securityHeaders = {
   "X-Content-Type-Options": "nosniff",
   "X-Frame-Options": "DENY",
 };
+
+function clampSessionLimit(value, fallback, maximum) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed)
+    ? Math.min(maximum, Math.max(1, Math.trunc(parsed)))
+    : fallback;
+}
 
 async function listJsonlRecursive(directory, results = []) {
   try {
@@ -312,14 +332,14 @@ async function parseClaudeSession(candidate) {
   };
 }
 
-async function scanSessions() {
+async function scanSessions(limit) {
   const [codexFiles, claudeFiles] = await Promise.all([
     listJsonlRecursive(join(codexStore, "sessions")),
     listClaudeProjectSessions(join(claudeStore, "projects")),
   ]);
   const [codexCandidates, claudeCandidates] = await Promise.all([
-    withStats(codexFiles, 120),
-    withStats(claudeFiles, 180),
+    withStats(codexFiles, Math.max(120, limit)),
+    withStats(claudeFiles, Math.max(180, limit)),
   ]);
   const [codexSessions, claudeSessions] = await Promise.all([
     Promise.all(codexCandidates.map(parseCodexSession)),
@@ -335,7 +355,354 @@ async function scanSessions() {
 
   return [...unique.values()]
     .sort((a, b) => b.activityAt.localeCompare(a.activityAt))
-    .slice(0, scanLimit);
+    .slice(0, limit);
+}
+
+let sessionLookupCache = null;
+let sessionLookupCachedAt = 0;
+let sessionLookupInFlight = null;
+
+function getCachedLookupSessions() {
+  if (sessionLookupCache && Date.now() - sessionLookupCachedAt < 15_000) {
+    return Promise.resolve(sessionLookupCache);
+  }
+  sessionLookupInFlight ||= scanSessions(lookupLimit)
+    .then((sessions) => {
+      sessionLookupCache = sessions;
+      sessionLookupCachedAt = Date.now();
+      return sessions;
+    })
+    .finally(() => { sessionLookupInFlight = null; });
+  return sessionLookupInFlight;
+}
+
+function runProbe(command, args, timeoutMs = 1_500) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      shell: false,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let output = "";
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk) => {
+      output += chunk;
+      if (output.length > 1_000_000) child.kill();
+    });
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      if (timedOut || code !== 0 || output.length > 1_000_000) {
+        reject(new Error("Process check failed."));
+        return;
+      }
+      resolve(output);
+    });
+  });
+}
+
+async function probeRunningAgents() {
+  const checkedAt = new Date().toISOString();
+  try {
+    if (process.platform === "win32") {
+      const script = "Get-CimInstance Win32_Process -Filter \"Name='claude.exe' or Name='codex.exe'\" | Select-Object Name,CommandLine | ConvertTo-Json -Compress";
+      const output = await runProbe("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script]);
+      const parsed = output.trim() ? JSON.parse(output) : [];
+      const { claude, codex } = countWindowsAgentProcesses(parsed);
+      return { available: true, claude, codex, checkedAt };
+    }
+
+    if (["darwin", "linux"].includes(process.platform)) {
+      const output = await runProbe("ps", ["-eo", "args="]);
+      const serverPath = resolve(process.argv[1] || "");
+      const { claude, codex } = countPosixAgentProcesses(output.split(/\r?\n/), serverPath);
+      return { available: true, claude, codex, checkedAt };
+    }
+  } catch {
+    // Process enumeration is a sanity check, not a prerequisite for the app.
+  }
+  return { available: false, claude: null, codex: null, checkedAt };
+}
+
+let runningAgentsCache = null;
+let runningAgentsCachedAt = 0;
+let runningAgentsInFlight = null;
+
+function getRunningAgents() {
+  if (runningAgentsCache && Date.now() - runningAgentsCachedAt < 5_000) {
+    return Promise.resolve(runningAgentsCache);
+  }
+  runningAgentsInFlight ||= probeRunningAgents()
+    .then((result) => {
+      runningAgentsCache = result;
+      runningAgentsCachedAt = Date.now();
+      return result;
+    })
+    .finally(() => { runningAgentsInFlight = null; });
+  return runningAgentsInFlight;
+}
+
+const visibleWindowsScript = [
+  "$ErrorActionPreference = 'Stop'",
+  "try {",
+  "  $utf8Encoding = New-Object System.Text.UTF8Encoding",
+  "  [Console]::OutputEncoding = $utf8Encoding",
+  "  $OutputEncoding = $utf8Encoding",
+  "  Add-Type -TypeDefinition @'",
+  "using System;",
+  "using System.Collections.Generic;",
+  "using System.Runtime.InteropServices;",
+  "using System.Text;",
+  "",
+  "public static class SessionIndexNativeWindowProbeV5",
+  "{",
+  "    public sealed class WindowInfo",
+  "    {",
+  "        public uint Pid { get; set; }",
+  "        public string Title { get; set; }",
+  "    }",
+  "",
+  "    private delegate bool EnumWindowCallback(IntPtr h, IntPtr l);",
+  "",
+  "    [DllImport(\"user32.dll\")]",
+  "    [return: MarshalAs(UnmanagedType.Bool)]",
+  "    private static extern bool EnumWindows(EnumWindowCallback callback, IntPtr extraData);",
+  "",
+  "    [DllImport(\"user32.dll\")]",
+  "    [return: MarshalAs(UnmanagedType.Bool)]",
+  "    private static extern bool IsWindowVisible(IntPtr h);",
+  "",
+  "    [DllImport(\"user32.dll\", CharSet = CharSet.Unicode, SetLastError = true)]",
+  "    private static extern int GetWindowTextW(IntPtr h, StringBuilder title, int maxCount);",
+  "",
+  "    [DllImport(\"user32.dll\", SetLastError = true)]",
+  "    private static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);",
+  "",
+  "    public static WindowInfo[] GetVisibleWindows(uint[] terminalPids)",
+  "    {",
+  "        List<WindowInfo> windows = new List<WindowInfo>();",
+  "        HashSet<uint> terminalPidSet = new HashSet<uint>(terminalPids ?? new uint[0]);",
+  "        EnumWindows(delegate(IntPtr h, IntPtr l) {",
+  "            if (!IsWindowVisible(h)) return true;",
+  "            uint pid;",
+  "            GetWindowThreadProcessId(h, out pid);",
+  "            if (!terminalPidSet.Contains(pid)) return true;",
+  "            StringBuilder title = new StringBuilder(32768);",
+  "            if (GetWindowTextW(h, title, title.Capacity) <= 0) return true;",
+  "            string text = title.ToString();",
+  "            if (String.IsNullOrWhiteSpace(text)) return true;",
+  "            windows.Add(new WindowInfo { Pid = pid, Title = text });",
+  "            return true;",
+  "        }, IntPtr.Zero);",
+  "        return windows.ToArray();",
+  "    }",
+  "}",
+  "'@",
+  "  $terminalHosts = @('WindowsTerminal', 'OpenConsole', 'conhost', 'cmd', 'powershell', 'pwsh', 'wt', 'alacritty', 'WezTerm', 'wezterm-gui', 'Hyper', 'mintty', 'Tabby', 'ConEmu', 'ConEmu64')",
+  "  $terminalProcesses = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $terminalHosts -contains $_.ProcessName })",
+  "  $processNames = @{}",
+  "  $terminalProcesses | ForEach-Object { $processNames[[int]$_.Id] = $_.ProcessName }",
+  "  $terminalPids = [uint32[]]@($terminalProcesses | ForEach-Object { [uint32]$_.Id })",
+  "  $windows = @([SessionIndexNativeWindowProbeV5]::GetVisibleWindows($terminalPids) | ForEach-Object {",
+  "    [PSCustomObject]@{ Pid = [int]$_.Pid; Title = $_.Title; ProcessName = $processNames[[int]$_.Pid] }",
+  "  })",
+  "  [PSCustomObject]@{ ok = $true; windows = $windows } | ConvertTo-Json -Compress -Depth 3",
+  "} catch {",
+  "  [Console]::Error.WriteLine([string]$_.Exception.Message)",
+  "  exit 1",
+  "}",
+].join("\n");
+
+async function probeVisibleWindows() {
+  const checkedAt = new Date().toISOString();
+  if (process.platform !== "win32") {
+    return { available: false, windows: [], checkedAt };
+  }
+
+  try {
+    const output = await runProbe(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", visibleWindowsScript],
+      8_000,
+    );
+    return { ...parseVisibleWindowsProbeOutput(output), checkedAt };
+  } catch {
+    // Open-window detection is optional and must never prevent the app from loading.
+    return { available: false, windows: [], checkedAt };
+  }
+}
+
+let visibleWindowsCache = null;
+let visibleWindowsCachedAt = 0;
+let visibleWindowsInFlight = null;
+
+function getVisibleWindows() {
+  if (visibleWindowsCache && Date.now() - visibleWindowsCachedAt < 20_000) {
+    return Promise.resolve(visibleWindowsCache);
+  }
+  visibleWindowsInFlight ||= probeVisibleWindows()
+    .then((result) => {
+      visibleWindowsCache = result;
+      visibleWindowsCachedAt = Date.now();
+      return result;
+    })
+    .finally(() => { visibleWindowsInFlight = null; });
+  return visibleWindowsInFlight;
+}
+
+async function getWindowSessionOverview() {
+  const result = await getVisibleWindows();
+  const windowCount = Array.isArray(result.windows) ? result.windows.length : 0;
+  if (!result.available) {
+    return {
+      available: false,
+      matched: [],
+      unidentified: [],
+      ignoredCount: 0,
+      windowCount,
+      checkedAt: result.checkedAt,
+    };
+  }
+
+  try {
+    const sessions = await getCachedLookupSessions();
+    const matching = matchWindowsToSessions(result.windows, sessions);
+    const sessionsByKey = new Map(
+      sessions.map((session) => [session.agent + ":" + session.sessionId, session]),
+    );
+    return {
+      available: true,
+      matched: matching.matched.map((match) => {
+        const session = sessionsByKey.get(match.agent + ":" + match.sessionId);
+        return {
+          ...match,
+          folder: session?.folder || "",
+          activityAt: session?.activityAt || "",
+        };
+      }),
+      unidentified: matching.unidentified,
+      ignoredCount: matching.ignored.length,
+      windowCount,
+      checkedAt: result.checkedAt,
+    };
+  } catch {
+    // A failed session scan should not turn this best-effort endpoint into an error.
+    const matching = matchWindowsToSessions(result.windows, []);
+    return {
+      available: true,
+      matched: [],
+      unidentified: matching.unidentified,
+      ignoredCount: matching.ignored.length,
+      windowCount,
+      checkedAt: result.checkedAt,
+    };
+  }
+}
+
+function readJsonBody(request, maxBytes) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    request.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(new Error("Request body is too large."));
+        request.resume();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    request.on("end", () => {
+      if (size > maxBytes) return;
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      } catch {
+        reject(new Error("Request body must be valid JSON."));
+      }
+    });
+    request.on("error", reject);
+  });
+}
+
+function tokenMatches(value) {
+  const supplied = Buffer.from(String(value || ""));
+  const expected = Buffer.from(launchToken);
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
+
+function spawnDetached(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      ...options,
+      detached: true,
+      shell: false,
+      stdio: "ignore",
+    });
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+    child.once("error", reject);
+  });
+}
+
+function shellSingleQuote(value) {
+  return `'${String(value).replaceAll("'", `'\\''`)}'`;
+}
+
+async function launchTerminal(folder, command) {
+  if (process.platform === "win32") {
+    try {
+      await spawnDetached("wt.exe", ["-w", "0", "nt", "-d", folder, "powershell.exe", "-NoLogo", "-NoExit", "-Command", command]);
+      return "windows-terminal";
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    await spawnDetached("powershell.exe", ["-NoLogo", "-NoExit", "-Command", command], {
+      cwd: folder,
+      windowsHide: false,
+    });
+    return "powershell";
+  }
+
+  if (process.platform === "darwin") {
+    const terminalCommand = `cd ${shellSingleQuote(folder)} && ${command}`
+      .replaceAll("\\", "\\\\")
+      .replaceAll('"', '\\"');
+    await spawnDetached("osascript", [
+      "-e", `tell application \"Terminal\" to do script \"${terminalCommand}\"`,
+      "-e", "tell application \"Terminal\" to activate",
+    ]);
+    return "terminal.app";
+  }
+
+  if (process.platform === "linux") {
+    const attempts = [
+      ["gnome-terminal", [`--working-directory=${folder}`, "--", "bash", "-lc", `${command}; exec bash`]],
+      ["konsole", ["--workdir", folder, "-e", "bash", "-lc", `${command}; exec bash`]],
+      ["xfce4-terminal", [`--working-directory=${folder}`, "-e", `bash -lc \"${command}; exec bash\"`]],
+      ["x-terminal-emulator", ["-e", "bash", "-lc", `${command}; exec bash`]],
+      ["xterm", ["-e", "bash", "-lc", `${command}; exec bash`]],
+    ];
+    for (const [terminal, args] of attempts) {
+      try {
+        await spawnDetached(terminal, args, { cwd: folder });
+        return terminal;
+      } catch {
+        // Desktop environments expose different terminal launchers.
+      }
+    }
+    throw new Error("No supported terminal emulator was found.");
+  }
+
+  throw new Error("No supported terminal emulator was found.");
 }
 
 // Local-machine probe only (127.0.0.1 Ollama). Never a network request.
@@ -371,26 +738,31 @@ function sendJson(response, statusCode, payload) {
   response.end(JSON.stringify(payload));
 }
 
-function requestIsLocal(request) {
+function requestIsLocal(request, requireOrigin = false) {
   const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
   const allowedOrigins = new Set([`http://127.0.0.1:${port}`, `http://localhost:${port}`]);
   const requestHost = request.headers.host || "";
   const requestOrigin = request.headers.origin;
-  return allowedHosts.has(requestHost) && (!requestOrigin || allowedOrigins.has(requestOrigin));
+  return allowedHosts.has(requestHost) && (requireOrigin ? allowedOrigins.has(requestOrigin) : (!requestOrigin || allowedOrigins.has(requestOrigin)));
 }
 
 createServer(async (request, response) => {
-  if (!requestIsLocal(request)) {
-    sendJson(response, 403, { error: "Local requests only." });
-    return;
-  }
+  const url = new URL(request.url, `http://${host}`);
+  const isLaunchPost = request.method === "POST" && url.pathname === "/api/launch";
 
-  if (request.method !== "GET") {
+  if (request.method !== "GET" && !isLaunchPost) {
+    if (!requestIsLocal(request)) {
+      sendJson(response, 403, { error: "Local requests only." });
+      return;
+    }
     response.writeHead(405, { ...securityHeaders, Allow: "GET" }).end("Method not allowed");
     return;
   }
 
-  const url = new URL(request.url, `http://${host}`);
+  if (!requestIsLocal(request, isLaunchPost)) {
+    sendJson(response, 403, { error: "Local requests only." });
+    return;
+  }
 
   if (request.method === "GET" && url.pathname === "/api/health") {
     sendJson(response, 200, { ok: true });
@@ -401,6 +773,10 @@ createServer(async (request, response) => {
     sendJson(response, 200, {
       scanRoot,
       scanLimit,
+      lookupLimit,
+      launchToken,
+      launchMode,
+      platform: process.platform,
       stores: {
         codex: join(codexStore, "sessions"),
         claude: join(claudeStore, "projects"),
@@ -409,9 +785,19 @@ createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "GET" && url.pathname === "/api/agents/running") {
+    sendJson(response, 200, await getRunningAgents());
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/windows") {
+    sendJson(response, 200, await getWindowSessionOverview());
+    return;
+  }
+
   if (request.method === "GET" && url.pathname === "/api/sessions/scan") {
     try {
-      const sessions = await scanSessions();
+      const sessions = await scanSessions(scanLimit);
       sendJson(response, 200, {
         root: scanRoot,
         sessions,
@@ -420,6 +806,80 @@ createServer(async (request, response) => {
     } catch (error) {
       console.error("Session scan failed", error);
       sendJson(response, 500, { error: "Could not scan the local agent session stores." });
+    }
+    return;
+  }
+
+  if (isLaunchPost) {
+    if (launchMode === "off") {
+      sendJson(response, 403, { error: "Launching is disabled (SESSION_LAUNCH=off)." });
+      return;
+    }
+    if (!tokenMatches(request.headers["x-session-index-token"])) {
+      sendJson(response, 403, { error: "Invalid launch token." });
+      return;
+    }
+
+    let body;
+    try {
+      body = await readJsonBody(request, 4_096);
+    } catch (error) {
+      sendJson(response, 400, { error: error.message });
+      return;
+    }
+    if (!body || !["codex", "claude"].includes(body.agent)) {
+      sendJson(response, 400, { error: "Invalid agent." });
+      return;
+    }
+    if (typeof body.sessionId !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{5,127}$/.test(body.sessionId)) {
+      sendJson(response, 400, { error: "Invalid session id." });
+      return;
+    }
+
+    let sessions;
+    try {
+      sessions = await getCachedLookupSessions();
+    } catch (error) {
+      console.error("Session scan failed", error);
+      sendJson(response, 500, { error: "Could not scan the local agent session stores." });
+      return;
+    }
+    const session = sessions.find((item) => item.agent === body.agent && item.sessionId === body.sessionId);
+    if (!session) {
+      sendJson(response, 404, {
+        error: "That session could not be found. Its session log may have been deleted, or its recorded folder may be outside SESSION_SCAN_ROOT.",
+      });
+      return;
+    }
+
+    let folderIsSafe = false;
+    try {
+      folderIsSafe = isInsideScanRoot(session.folder) && (await stat(session.folder)).isDirectory();
+    } catch {
+      folderIsSafe = false;
+    }
+    const command = session.agent === "codex"
+      ? `codex resume ${session.sessionId}`
+      : `claude --resume ${session.sessionId}`;
+    if (!folderIsSafe) {
+      sendJson(response, 409, { error: "The session folder is unavailable or outside the scan root.", command, folder: session.folder });
+      return;
+    }
+    if (launchMode === "dry-run") {
+      sendJson(response, 200, { ok: true, launcher: "dry-run", command, folder: session.folder });
+      return;
+    }
+
+    try {
+      const launcher = await launchTerminal(session.folder, command);
+      sendJson(response, 200, { ok: true, launcher, command, folder: session.folder });
+    } catch (error) {
+      sendJson(response, 501, {
+        ok: false,
+        reason: error?.message || "No supported terminal emulator was found.",
+        command,
+        folder: session.folder,
+      });
     }
     return;
   }
@@ -469,4 +929,7 @@ createServer(async (request, response) => {
 }).listen(port, host, () => {
   console.log(`Session Index available at http://${host}:${port}`);
   console.log(`Session scan root: ${scanRoot}`);
+  // Warm the larger lookup scan without delaying listen. Window matching and
+  // launching can then share the existing short-lived cache.
+  void getCachedLookupSessions().catch(() => {});
 });
