@@ -166,6 +166,18 @@ test("serves the app with local security headers", async () => {
   assert.match(windowHelpers.headers["content-type"], /^text\/javascript/);
 });
 
+test("reports health and build identity without changing the launcher signature", async () => {
+  const response = await httpRequest("/api/health");
+  assert.equal(response.status, 200);
+  assert.match(response.body, /"ok":true/);
+
+  const health = JSON.parse(response.body);
+  assert.equal(health.ok, true);
+  assert.equal(health.version, "0.1.0");
+  assert.equal(typeof health.startedAt, "string");
+  assert.equal(Number.isNaN(Date.parse(health.startedAt)), false);
+});
+
 test("exposes local configuration and parses synthetic provider metadata", async () => {
   const config = await httpRequest("/api/config");
   assert.equal(config.status, 200);

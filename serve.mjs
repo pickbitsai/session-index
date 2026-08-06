@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { createReadStream, statSync } from "node:fs";
+import { createReadStream, readFileSync, statSync } from "node:fs";
 import { open, readdir, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { homedir } from "node:os";
@@ -20,6 +20,19 @@ import { matchWindowsToSessions, parseVisibleWindowsProbeOutput } from "./window
 const host = "127.0.0.1";
 const port = Number(process.env.PORT || 4173);
 const root = process.cwd();
+const startedAt = new Date().toISOString();
+let version;
+try {
+  const packageMetadata = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  if (typeof packageMetadata.version === "string" && packageMetadata.version) {
+    version = packageMetadata.version;
+  }
+} catch {
+  // Build identity is informational and must never prevent the server from starting.
+}
+const healthPayload = { ok: true };
+if (version) healthPayload.version = version;
+healthPayload.startedAt = startedAt;
 const profileRoot = process.env.USERPROFILE || homedir();
 const defaultScanRoot = process.platform === "win32" ? "C:\\new" : join(homedir(), "new");
 const scanRoot = resolve(process.env.SESSION_SCAN_ROOT || defaultScanRoot);
@@ -765,7 +778,7 @@ createServer(async (request, response) => {
   }
 
   if (request.method === "GET" && url.pathname === "/api/health") {
-    sendJson(response, 200, { ok: true });
+    sendJson(response, 200, healthPayload);
     return;
   }
 
