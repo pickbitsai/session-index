@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Session Index is dependency-free at runtime; this covers devDependencies and
+  # anything added later. Minor and patch bumps arrive as one grouped PR.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
