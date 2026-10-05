@@ -1,0 +1,9 @@
+{
+  "forbid": [
+    "logs/**"
+  ],
+  "allow": [],
+  "allowTerms": [],
+  "buildDirs": [],
+  "buildCommand": null
+}
