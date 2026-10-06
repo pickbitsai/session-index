@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// release-guard v1.0.1
+// release-guard v1.1.0
 // Vendored from pickbitsai/release-guard. Copy this file alone into scripts/.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -7,9 +7,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-export const VERSION = '1.0.0';
+export const VERSION = '1.1.0';
 const MAX_TEXT_SIZE = 5 * 1024 * 1024;
-const USAGE = 'Usage: node release-guard.mjs scan [--git-archive <ref>] [--dir <path>]... [--npm-pack] [--config <file>] [--denylist <file>] [--json] [--repo <path>]';
+const USAGE = 'Usage: node release-guard.mjs scan [--git-archive <ref>] [--tracked [<ref>]] [--range <base>..<head>] [--dir <path>]... [--npm-pack] [--config <file>] [--denylist <file>] [--json] [--repo <path>]';
 const SECRET_RULES = [
   ['SECRET_AWS', /AKIA[0-9A-Z]{16}/g],
   ['SECRET_STRIPE', /(?:sk|rk)_live_[0-9A-Za-z]{10,}/g],
@@ -37,6 +37,7 @@ export function relativePattern(value, field = 'path') {
 export function validateConfig(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Config must be a JSON object');
   const config = { ...input };
+  if (input.public !== undefined && typeof input.public !== 'boolean') throw new Error('Config public must be a boolean');
   for (const field of ['forbid', 'allow', 'allowTerms', 'buildDirs']) {
     const values = input[field] ?? [];
     if (!Array.isArray(values) || values.some(v => typeof v !== 'string' || !v.trim() || /[\r\n\0]/.test(v))) {
@@ -123,25 +124,30 @@ export function runCommand(command, args, cwd) {
 function parseArgs(argv) {
   if (argv.length === 1 && ['--help', '-h'].includes(argv[0])) return { help: true };
   if (argv[0] !== 'scan') throw new Error(USAGE);
-  const options = { repo: process.cwd(), dirs: [], archives: [], npm: false, json: false };
+  const options = { repo: process.cwd(), dirs: [], archives: [], tracked: [], ranges: [], npm: false, json: false };
   const seen = new Set();
   for (let i = 1; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === '--json' || flag === '--npm-pack') {
       if (seen.has(flag)) throw new Error(`Duplicate option ${flag}`);
       seen.add(flag); options[flag === '--json' ? 'json' : 'npm'] = true;
-    } else if (['--repo', '--config', '--denylist', '--dir', '--git-archive'].includes(flag)) {
+    } else if (flag === '--tracked') {
+      if (seen.has(flag)) throw new Error(`Duplicate option ${flag}`);
+      seen.add(flag);
+      options.tracked.push(argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[++i] : 'HEAD');
+    } else if (['--repo', '--config', '--denylist', '--dir', '--git-archive', '--range'].includes(flag)) {
       const value = argv[++i];
       if (!value || value.startsWith('--')) throw new Error(`Missing value for ${flag}`);
       if (flag !== '--dir' && seen.has(flag)) throw new Error(`Duplicate option ${flag}`);
       seen.add(flag);
       if (flag === '--dir') options.dirs.push(value);
       else if (flag === '--git-archive') options.archives.push(value);
+      else if (flag === '--range') options.ranges.push(value);
       else options[flag.slice(2)] = value;
     } else throw new Error(`Unknown option ${flag}`);
   }
   options.repo = path.resolve(options.repo);
-  if (!options.dirs.length && !options.archives.length && !options.npm) options.archives.push('HEAD');
+  if (!options.dirs.length && !options.archives.length && !options.tracked.length && !options.ranges.length && !options.npm) options.archives.push('HEAD');
   return options;
 }
 
@@ -282,9 +288,91 @@ function npmEntries(repo) {
   });
 }
 
+function gitBytes(repo, args) {
+  const result = spawnSync('git', args, { cwd: repo, maxBuffer: 32 * 1024 * 1024, windowsHide: true });
+  if (result.error || result.status !== 0) throw new Error('git failed reading scan target');
+  return result.stdout;
+}
+
+function resolveRef(repo, ref, type) {
+  return runCommand('git', ['rev-parse', '--verify', '--end-of-options', `${ref}^{${type}}`], repo).trim();
+}
+
+function blobBytes(repo, oid) {
+  const size = Number(runCommand('git', ['cat-file', '-s', oid], repo).trim());
+  return size > MAX_TEXT_SIZE ? null : gitBytes(repo, ['cat-file', 'blob', oid]);
+}
+
+function* trackedEntries(repo, ref) {
+  const tree = resolveRef(repo, ref, 'tree');
+  for (const record of gitBytes(repo, ['ls-tree', '-r', '-z', '--full-tree', tree]).toString('utf8').split('\0').filter(Boolean)) {
+    const tab = record.indexOf('\t');
+    const [, type, oid] = record.slice(0, tab).split(' ');
+    yield { name: record.slice(tab + 1), data: type === 'blob' ? blobBytes(repo, oid) : null };
+  }
+}
+
+function rangeCommits(repo, range) {
+  const parts = range.split('..');
+  if (parts.length !== 2 || parts.some(ref => !ref || ref.startsWith('.'))) throw new Error('Range must be <base>..<head>');
+  const [base, head] = parts;
+  const tip = resolveRef(repo, head, 'commit');
+  let excluded = null;
+  if (!/^0+$/.test(base)) {
+    // Only a full object id may be absent (the pre-force-push tip CI reports); a bad ref name stays an error.
+    try { excluded = [resolveRef(repo, base, 'commit')]; } catch (error) { if (!/^[0-9a-f]{40}$/i.test(base)) throw error; }
+  }
+  // New branch, or a base this clone lacks: scan what no other remote branch already has. In CI the
+  // pushed ref already points at the tip, so it must never exclude itself; no refs left means full history.
+  excluded ??= runCommand('git', ['for-each-ref', '--format=%(objectname)', 'refs/remotes/'], repo)
+    .trim().split(/\s+/).filter(oid => oid && oid !== tip);
+  const not = excluded.length ? ['--not', ...excluded] : [];
+  return runCommand('git', ['rev-list', '--reverse', '--topo-order', tip, ...not], repo).trim().split(/\s+/).filter(Boolean);
+}
+
+// NUL-delimited raw diffs retain unusual filenames; merge diffs use only the first parent.
+function* rangeEntries(repo, commit) {
+  const [, parent] = runCommand('git', ['rev-list', '--parents', '-n', '1', commit], repo).trim().split(' ');
+  const args = ['diff-tree', '--no-commit-id', '--raw', '--no-abbrev', '-z', '-r', '-M', '--no-ext-diff', '--no-textconv'];
+  args.push(...(parent ? [parent, commit] : ['--root', commit]));
+  const records = gitBytes(repo, args).toString('utf8').split('\0');
+  const short = runCommand('git', ['rev-parse', '--short', commit], repo).trim();
+  for (let i = 0; i < records.length && records[i];) {
+    const [oldMode, mode, oldOid, newOid, status] = records[i++].split(' ');
+    let name = records[i++];
+    if (/^[RC]/.test(status)) name = records[i++];
+    if (status === 'D') continue;
+    const entry = { name, commit: short, checkPath: /^[ARC]/.test(status), data: null };
+    // Gitlinks have no file contents. Symlinks are ordinary blobs containing link text.
+    if (mode === '160000') { yield entry; continue; }
+    const content = textContent({ data: blobBytes(repo, newOid) });
+    if (content === null) { yield entry; continue; }
+    const added = [], lineNumbers = [];
+    if (/^0+$/.test(oldOid) || oldMode === ':160000') {
+      const lines = content.split('\n');
+      if (lines.at(-1) === '') lines.pop();
+      lines.forEach((line, index) => { added.push(line); lineNumbers.push(index + 1); });
+    } else {
+      const patch = gitBytes(repo, ['diff', '--no-color', '--no-ext-diff', '--no-textconv', '--text', '--unified=0',
+        '--output-indicator-new=+', '--output-indicator-old=-', '--output-indicator-context= ', oldOid, newOid]).toString('utf8');
+      let line;
+      for (const record of patch.split('\n')) {
+        const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(record);
+        if (hunk) line = Number(hunk[1]);
+        else if (line !== undefined && record.startsWith('+')) { added.push(record.slice(1)); lineNumbers.push(line++); }
+        else if (line !== undefined && record.startsWith(' ')) line++;
+      }
+    }
+    entry.data = Buffer.from(added.join('\n'));
+    entry.lineNumbers = lineNumbers;
+    yield entry;
+  }
+}
+
 function textContent(entry) {
   if (entry.file && fs.statSync(entry.file).size > MAX_TEXT_SIZE) return null;
-  const bytes = entry.link !== undefined ? Buffer.from(entry.link) : fs.readFileSync(entry.file);
+  const bytes = entry.data !== undefined ? entry.data : entry.link !== undefined ? Buffer.from(entry.link) : fs.readFileSync(entry.file);
+  if (bytes === null) return null;
   if (bytes.length > MAX_TEXT_SIZE || bytes.includes(0)) return null;
   // Reject invalid UTF-8 and binary control bytes; normal whitespace remains text.
   if (bytes.some(b => b < 32 && ![9, 10, 12, 13].includes(b))) return null;
@@ -311,12 +399,15 @@ export function scan(options) {
   });
   const report = { version: VERSION, targets: [], warnings: [], violations: [], summary: { files: 0, textFiles: 0, violations: 0, targets: 0 } };
   if (!rawTerms.length) report.warnings.push('WARNING: denylist check skipped; no denylist terms supplied (use --denylist or RELEASE_GUARD_DENYLIST).');
-  function check(entries, target) {
-    report.targets.push(target);
+  function check(entries, target, register = true) {
+    if (register) report.targets.push(target);
     for (const entry of entries) {
       report.summary.files++;
-      if (forbiddenBuiltin(entry.name)) report.violations.push({ target, path: entry.name, rule: 'FORBIDDEN_BUILTIN', detail: 'built-in forbidden path' });
-      if (forbid.some(pattern => pattern.test(entry.name))) report.violations.push({ target, path: entry.name, rule: 'FORBIDDEN_CONFIG', detail: 'configured instance-data path' });
+      const fields = { target, path: entry.name, ...(entry.commit ? { commit: entry.commit } : {}) };
+      if (entry.checkPath !== false) {
+        if (forbiddenBuiltin(entry.name)) report.violations.push({ ...fields, rule: 'FORBIDDEN_BUILTIN', detail: 'built-in forbidden path' });
+        if (forbid.some(pattern => pattern.test(entry.name))) report.violations.push({ ...fields, rule: 'FORBIDDEN_CONFIG', detail: 'configured instance-data path' });
+      }
       if (allow.some(pattern => pattern.test(entry.name))) continue;
       const content = textContent(entry);
       if (content === null) continue;
@@ -326,7 +417,7 @@ export function scan(options) {
       function add(rule, match, index) {
         let lo = 0, hi = lineStarts.length;
         while (lo + 1 < hi) { const mid = (lo + hi) >>> 1; if (lineStarts[mid] <= index) lo = mid; else hi = mid; }
-        report.violations.push({ target, path: entry.name, line: lo + 1, rule, detail: redacted(match) });
+        report.violations.push({ ...fields, line: entry.lineNumbers ? entry.lineNumbers[lo] : lo + 1, rule, detail: redacted(match) });
       }
       for (const [rule, regex] of SECRET_RULES) {
         for (const match of content.matchAll(regex)) {
@@ -350,6 +441,13 @@ export function scan(options) {
     try { check(materializeArchive(options.repo, ref, temp), `git-archive:${ref}`); }
     finally { fs.rmSync(temp, { recursive: true, force: true }); }
   }
+  for (const ref of options.tracked ?? []) check(trackedEntries(options.repo, ref), `tracked:${ref}`);
+  for (const range of options.ranges ?? []) {
+    const target = `range:${range}`;
+    const commits = rangeCommits(options.repo, range);
+    report.targets.push(target);
+    for (const commit of commits) check(rangeEntries(options.repo, commit), target, false);
+  }
   for (const dir of options.dirs) check(directoryEntries(path.resolve(options.repo, dir)), `dir:${dir}`);
   if (options.npm) check(npmEntries(options.repo), 'npm-pack');
   report.summary.violations = report.violations.length;
@@ -367,7 +465,7 @@ export function main(argv = process.argv.slice(2)) {
       for (const warning of report.warnings) console.error(warning);
       for (const issue of report.violations) {
         const displayPath = /[\x00-\x1f\x7f]/.test(issue.path) ? JSON.stringify(issue.path) : issue.path;
-        console.log(`${displayPath}${issue.line ? ':' + issue.line : ''}  ${issue.rule}  ${issue.detail}`);
+        console.log(`${displayPath}${issue.line ? ':' + issue.line : ''}  ${issue.rule}  ${issue.detail}${issue.commit ? '  ' + issue.commit : ''}`);
       }
       console.log(`Scanned ${report.summary.files} files (${report.summary.textFiles} text) across ${report.summary.targets} targets: ${report.summary.violations} violations.`);
     }
@@ -381,7 +479,5 @@ export function main(argv = process.argv.slice(2)) {
   }
 }
 
-// Real paths on both sides: when launched through a junction or symlink (C:/new/Weaver points into
-// pickbits-services), argv[1] is the link path but import.meta.url is already resolved, and a plain
-// compare silently skips main() and exits 0.
+// Resolve both paths when launched through a junction or symlink, so main() still runs.
 if (process.argv[1] && fs.realpathSync(path.resolve(process.argv[1])) === fs.realpathSync(fileURLToPath(import.meta.url))) process.exitCode = main();
