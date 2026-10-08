@@ -38,6 +38,10 @@
         box-sizing: border-box;
       }
 
+      [hidden] {
+        display: none !important;
+      }
+
       html {
         min-width: 320px;
         background: var(--paper);
@@ -166,6 +170,61 @@
         padding: 0 11px;
         background: rgba(255, 254, 250, 0.75);
         font-size: 0.76rem;
+      }
+
+      .restart-banner {
+        align-items: flex-start;
+        background: #f7efe0;
+      }
+
+      .restart-banner-main {
+        display: grid;
+        flex: 1;
+        gap: 9px;
+        min-width: 0;
+      }
+
+      .restart-banner-title {
+        display: block;
+        margin-bottom: 3px;
+        color: var(--ink);
+        font-size: 0.9rem;
+      }
+
+      .restart-session-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 6px 12px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .restart-session-list li {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+        color: #735f27;
+        font-size: 0.76rem;
+      }
+
+      .restart-session-list strong,
+      .restart-session-list .restart-folder {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .restart-session-list .restart-folder {
+        color: var(--muted);
+      }
+
+      .restart-source {
+        margin-left: 6px;
+        color: var(--muted);
+        font-size: 0.68rem;
       }
 
       .privacy-banner-copy {
@@ -1601,6 +1660,10 @@
           flex-wrap: wrap;
         }
 
+        .restart-session-list {
+          grid-template-columns: 1fr;
+        }
+
         .privacy-banner-actions {
           justify-content: flex-end;
         }
@@ -1908,6 +1971,26 @@
           </div>
         </div>
 
+        <aside class="workspace-banner restart-banner" id="restartBanner" aria-label="Interrupted by restart" hidden>
+          <div class="restart-banner-main">
+            <div class="workspace-banner-copy">
+              <strong class="restart-banner-title">Interrupted by restart</strong>
+              <span id="restartBannerCopy"></span>
+            </div>
+            <ul class="restart-session-list" id="restartSessionList"></ul>
+          </div>
+          <div class="workspace-banner-actions">
+            <button class="button primary" id="relaunchRestartButton" type="button">Relaunch</button>
+            <button class="button" id="reviewRestartButton" type="button">Review</button>
+            <button class="button" id="copyRestartCommandsButton" type="button" hidden>Copy all commands</button>
+            <button class="icon-button" id="dismissRestartButton" type="button" aria-label="Dismiss interrupted sessions banner">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </div>
+        </aside>
+
         <aside class="workspace-banner" id="workspaceBanner" aria-label="Saved workspace" hidden>
           <span class="workspace-banner-copy" id="workspaceBannerCopy"></span>
           <div class="workspace-banner-actions">
@@ -2185,11 +2268,13 @@
         const STORAGE_KEY = "session-index.sessions.v1";
         const WORKSPACE_KEY = "session-index.workspace.v1";
         const WINDOW_MAP_KEY = "session-index.window-map.v1";
+        const RESTART_KEY = "session-index.restart.v1";
         const SCAN_PREF_KEY = "session-index.auto-scan.v1";
         const JULES_KEY = "session-index.jules-tasks.v1";
         const initialSessions = loadSessions();
         const initialWorkspace = loadWorkspace();
         const initialWindowMap = loadWindowMap();
+        const initialRestartDismissal = loadRestartDismissal();
         const storedScanPreference = readScanPreference();
         const state = {
           sessions: initialSessions,
@@ -2201,6 +2286,9 @@
           workspaceSelection: new Set(),
           workspaceStatuses: new Map(),
           workspaceLaunching: false,
+          restart: null,
+          restartChecked: false,
+          restartDismissedAt: initialRestartDismissal,
           openWindows: null,
           openWindowsServer: null,
           windowMap: initialWindowMap,
@@ -2234,6 +2322,13 @@
           scanButton: document.querySelector("#scanButton"),
           rememberWorkspaceButton: document.querySelector("#rememberWorkspaceButton"),
           scanStatus: document.querySelector("#scanStatus"),
+          restartBanner: document.querySelector("#restartBanner"),
+          restartBannerCopy: document.querySelector("#restartBannerCopy"),
+          restartSessionList: document.querySelector("#restartSessionList"),
+          relaunchRestartButton: document.querySelector("#relaunchRestartButton"),
+          reviewRestartButton: document.querySelector("#reviewRestartButton"),
+          copyRestartCommandsButton: document.querySelector("#copyRestartCommandsButton"),
+          dismissRestartButton: document.querySelector("#dismissRestartButton"),
           workspaceBanner: document.querySelector("#workspaceBanner"),
           workspaceBannerCopy: document.querySelector("#workspaceBannerCopy"),
           relaunchWorkspaceButton: document.querySelector("#relaunchWorkspaceButton"),
@@ -2328,6 +2423,18 @@
           } catch (error) {
             console.warn("Could not load saved workspace", error);
             return null;
+          }
+        }
+
+        function loadRestartDismissal() {
+          try {
+            const raw = localStorage.getItem(RESTART_KEY);
+            if (!raw) return "";
+            const parsed = JSON.parse(raw);
+            return typeof parsed?.interruptedAt === "string" ? parsed.interruptedAt : "";
+          } catch (error) {
+            console.warn("Could not load the dismissed restart", error);
+            return "";
           }
         }
 
@@ -2559,6 +2666,7 @@
             });
           } finally {
             updatePrivacyUi();
+            renderRestartBanner();
             renderWorkspaceBanner();
             if (elements.workspaceDialog.open) renderWorkspaceDialog();
           }
@@ -2612,6 +2720,21 @@
           return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
         }
 
+        function formatRestartTime(value) {
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return "an unknown time";
+          const datePart = new Intl.DateTimeFormat(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }).format(date);
+          const timePart = new Intl.DateTimeFormat(undefined, {
+            hour: "numeric",
+            minute: "2-digit",
+          }).format(date);
+          return `${datePart} at ${timePart}`;
+        }
+
         function resumeCommand(session) {
           const quotedId = quoteShellArg(session.sessionId.trim());
           return session.agent === "codex"
@@ -2650,6 +2773,7 @@
 
         function currentWorkspaceEntries() {
           if (state.workspaceMode === "restore") return state.workspace?.entries || [];
+          if (state.workspaceMode === "restart") return state.restart?.sessions || [];
           if (state.workspaceSource === "windows") {
             return (state.openWindows?.matched || [])
               .filter((entry) => ["claude", "codex"].includes(entry.agent) && entry.sessionId && entry.folder)
@@ -2679,6 +2803,47 @@
 
         function selectOpenWindowEntries() {
           state.workspaceSelection = new Set(currentWorkspaceEntries().map(workspaceKey));
+        }
+
+        function renderRestartBanner() {
+          const restart = state.restart;
+          const visible = Boolean(
+            restart &&
+            restart.confidence !== "none" &&
+            restart.sessions.length &&
+            restart.interruptedAt !== state.restartDismissedAt
+          );
+          elements.restartBanner.hidden = !visible;
+          if (!visible) return;
+
+          const count = restart.sessions.length;
+          const verb = restart.confidence === "low"
+            ? "may have been interrupted"
+            : count === 1
+              ? "was interrupted"
+              : "were interrupted";
+          const reason = restart.shutdown?.available ? restart.shutdown.reason : "";
+          const rebootCount = Number.isInteger(restart.shutdown?.rebootCount)
+            ? restart.shutdown.rebootCount
+            : 0;
+          const restartDetails = [
+            reason,
+            rebootCount > 1 ? `${rebootCount} restarts` : "",
+          ].filter(Boolean).join("; ");
+          elements.restartBannerCopy.textContent = `${count} session${count === 1 ? "" : "s"} ${verb} by a restart on ${formatRestartTime(restart.interruptedAt)}${restartDetails ? ` (${restartDetails})` : ""}.`;
+          elements.restartSessionList.innerHTML = restart.sessions.map((entry) => {
+            const agentName = entry.agent === "codex" ? "Codex" : "Claude";
+            const leaf = entry.folder.split(/[\\/]/).filter(Boolean).pop() || entry.folder;
+            return `<li>
+              <span class="agent-badge ${entry.agent}">${agentName}</span>
+              <strong title="${escapeHtml(entry.title)}">${escapeHtml(entry.title)}</strong>
+              <span class="restart-folder" title="${escapeHtml(entry.folder)}">${escapeHtml(leaf)}${entry.source === "snapshot" ? '<span class="restart-source" title="Seen open in a terminal window shortly before the shutdown">open at shutdown</span>' : ""}</span>
+            </li>`;
+          }).join("");
+          elements.relaunchRestartButton.hidden = !launchIsAvailable();
+          elements.relaunchRestartButton.disabled = state.workspaceLaunching || count === 0;
+          elements.copyRestartCommandsButton.hidden = launchIsAvailable();
+          elements.copyRestartCommandsButton.disabled = state.launchAvailability === "loading" || count === 0;
         }
 
         function renderWorkspaceBanner() {
@@ -2794,6 +2959,7 @@
         function workspaceRow(entry) {
           const key = workspaceKey(entry);
           const remembering = state.workspaceMode === "remember";
+          const selectable = remembering || state.workspaceMode === "restart";
           const checked = state.workspaceSelection.has(key);
           const agentName = entry.agent === "codex" ? "Codex" : "Claude";
           const folderLeaf = entry.folder.split(/[\\/]/).filter(Boolean).pop() || entry.folder;
@@ -2812,7 +2978,7 @@
           }
           return `
             <div class="workspace-row">
-              ${remembering ? `<input type="checkbox" data-workspace-select="${escapeHtml(key)}" aria-label="Include ${escapeHtml(entry.title)}"${checked ? " checked" : ""} />` : "<span></span>"}
+              ${selectable ? `<input type="checkbox" data-workspace-select="${escapeHtml(key)}" aria-label="Include ${escapeHtml(entry.title)}"${checked ? " checked" : ""} />` : "<span></span>"}
               <span class="agent-badge ${entry.agent}">${agentName}</span>
               <div class="workspace-session">
                 <strong>${escapeHtml(entry.title)}</strong>
@@ -2825,11 +2991,18 @@
 
         function renderWorkspaceDialog() {
           const remembering = state.workspaceMode === "remember";
+          const restarting = state.workspaceMode === "restart";
           const entries = currentWorkspaceEntries();
-          elements.workspaceTitle.textContent = remembering ? "Remember what's open" : "Review saved workspace";
+          elements.workspaceTitle.textContent = remembering
+            ? "Remember what's open"
+            : restarting
+              ? "Review interrupted sessions"
+              : "Review saved workspace";
           elements.workspaceDescription.textContent = remembering
             ? "Open terminal windows are matched to sessions by their visible titles. Unmatched windows are listed separately; you can switch to recently active sessions."
-            : "Review the saved sessions and relaunch them individually or together.";
+            : restarting
+              ? "Choose which sessions to relaunch after the restart, or copy their folder-prefixed resume commands."
+              : "Review the saved sessions and relaunch them individually or together.";
           elements.workspaceControls.hidden = !remembering;
           const detectionAvailable = Boolean(state.openWindows?.available);
           elements.workspaceSourceToggle.hidden = !remembering || !detectionAvailable;
@@ -2840,7 +3013,11 @@
           elements.workspaceWindow.value = String(state.workspaceWindowHours);
           elements.launchDisabled.textContent = launchUnavailableMessage(state.launchAvailability);
           elements.launchDisabled.hidden = launchIsAvailable();
-          elements.saveWorkspaceButton.hidden = !remembering;
+          elements.saveWorkspaceButton.hidden = !remembering && (!restarting || !launchIsAvailable());
+          elements.saveWorkspaceButton.textContent = restarting ? "Relaunch selected" : "Save workspace";
+          elements.saveWorkspaceButton.disabled = restarting && (
+            state.workspaceLaunching || entriesForWorkspaceCopy().length === 0
+          );
           elements.cancelWorkspaceButton.textContent = remembering ? "Cancel" : "Close";
           elements.workspaceList.innerHTML = entries.length
             ? entries.map(workspaceRow).join("")
@@ -2851,10 +3028,12 @@
                   ? "No open windows could be matched to sessions."
                   : remembering
                     ? "No saved sessions are available for this workspace."
-                    : "No sessions were saved in this workspace."
+                    : restarting
+                      ? "No interrupted sessions are available."
+                      : "No sessions were saved in this workspace."
             ) + "</p>";
           renderWindowDetection(remembering);
-          elements.copyWorkspaceCommandsButton.disabled = entries.length === 0;
+          elements.copyWorkspaceCommandsButton.disabled = entriesForWorkspaceCopy().length === 0;
         }
 
         async function fetchOpenWindows() {
@@ -2958,6 +3137,9 @@
             state.openWindows = null;
             state.workspaceSelection = new Set();
           }
+          if (mode === "restart") {
+            state.workspaceSelection = new Set(currentWorkspaceEntries().map(workspaceKey));
+          }
           renderWorkspaceDialog();
           elements.workspaceDialog.showModal();
           if (mode === "remember") fetchOpenWindows();
@@ -3009,9 +3191,9 @@
 
         function entriesForWorkspaceCopy() {
           const entries = currentWorkspaceEntries();
-          return state.workspaceMode === "remember"
-            ? entries.filter((entry) => state.workspaceSelection.has(workspaceKey(entry)))
-            : entries;
+          return state.workspaceMode === "restore"
+            ? entries
+            : entries.filter((entry) => state.workspaceSelection.has(workspaceKey(entry)));
         }
 
         async function launchWorkspaceEntry(entry) {
@@ -3043,13 +3225,19 @@
           return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
         }
 
-        async function relaunchWorkspace() {
-          if (!state.workspace || !launchIsAvailable() || state.workspaceLaunching) return;
-          if (!elements.workspaceDialog.open || state.workspaceMode !== "restore") openWorkspaceDialog("restore");
-          const entries = state.workspace.entries;
+        async function relaunchWorkspace(mode = "restore") {
+          const source = mode === "restart" ? state.restart : state.workspace;
+          if (!source || !launchIsAvailable() || state.workspaceLaunching) return;
+          if (!elements.workspaceDialog.open || state.workspaceMode !== mode) openWorkspaceDialog(mode);
+          const entries = mode === "restart" ? entriesForWorkspaceCopy() : state.workspace.entries;
+          if (!entries.length) {
+            showToast("Select at least one session first");
+            return;
+          }
           state.workspaceLaunching = true;
           state.workspaceStatuses = new Map(entries.map((entry) => [workspaceKey(entry), { state: "pending", detail: "" }]));
           renderWorkspaceDialog();
+          renderRestartBanner();
           renderWorkspaceBanner();
           let launched = 0;
           for (let index = 0; index < entries.length; index += 1) {
@@ -3057,6 +3245,7 @@
             if (await launchWorkspaceEntry(entries[index])) launched += 1;
           }
           state.workspaceLaunching = false;
+          renderRestartBanner();
           renderWorkspaceBanner();
           const failed = entries.length - launched;
           showToast(failed
@@ -3364,6 +3553,38 @@
           row.querySelector("details")?.removeAttribute("open");
         }
 
+        async function fetchRestartOverview() {
+          if (state.restartChecked) return;
+          state.restartChecked = true;
+          try {
+            const response = await fetch("/api/restart", {
+              headers: { Accept: "application/json" },
+            });
+            if (!response.ok) return;
+            const payload = await response.json();
+            const sessions = (Array.isArray(payload?.sessions) ? payload.sessions : [])
+              .filter(isValidWorkspaceEntry);
+            if (
+              !["high", "low"].includes(payload?.confidence) ||
+              typeof payload?.interruptedAt !== "string" ||
+              Number.isNaN(new Date(payload.interruptedAt).getTime()) ||
+              sessions.length === 0
+            ) return;
+            state.restart = {
+              interruptedAt: payload.interruptedAt,
+              confidence: payload.confidence,
+              shutdown: payload.shutdown && typeof payload.shutdown === "object"
+                ? payload.shutdown
+                : { available: false, reason: "" },
+              sessions,
+            };
+          } catch {
+            state.restart = null;
+          } finally {
+            renderRestartBanner();
+          }
+        }
+
         async function syncSessions({ notify = true } = {}) {
           if (state.scanning) return;
           state.scanning = true;
@@ -3439,6 +3660,7 @@
             if (notify) {
               showToast(added ? `${added} new session${added === 1 ? "" : "s"} added` : "Session list is up to date");
             }
+            void fetchRestartOverview();
           } catch (error) {
             console.error(error);
             if (notify) showToast("Scanning needs the local server: node serve.mjs");
@@ -3714,7 +3936,24 @@
         });
         elements.rememberWorkspaceButton.addEventListener("click", () => openWorkspaceDialog("remember"));
         document.querySelector("#reviewWorkspaceButton").addEventListener("click", () => openWorkspaceDialog("restore"));
-        elements.relaunchWorkspaceButton.addEventListener("click", relaunchWorkspace);
+        elements.relaunchWorkspaceButton.addEventListener("click", () => relaunchWorkspace("restore"));
+        elements.reviewRestartButton.addEventListener("click", () => openWorkspaceDialog("restart"));
+        elements.relaunchRestartButton.addEventListener("click", () => relaunchWorkspace("restart"));
+        elements.copyRestartCommandsButton.addEventListener("click", () => {
+          const entries = state.restart?.sessions || [];
+          if (!entries.length) return;
+          copyText(entries.map(commandWithFolder).join("\n"), `${entries.length} resume command${entries.length === 1 ? "" : "s"} copied`);
+        });
+        elements.dismissRestartButton.addEventListener("click", () => {
+          if (!state.restart?.interruptedAt) return;
+          state.restartDismissedAt = state.restart.interruptedAt;
+          try {
+            localStorage.setItem(RESTART_KEY, JSON.stringify({ interruptedAt: state.restartDismissedAt }));
+          } catch (error) {
+            console.warn("Could not save the dismissed restart", error);
+          }
+          renderRestartBanner();
+        });
         document.querySelector("#dismissWorkspaceButton").addEventListener("click", () => {
           state.workspaceDismissed = true;
           renderWorkspaceBanner();
@@ -3755,6 +3994,7 @@
           if (!checkbox) return;
           if (checkbox.checked) state.workspaceSelection.add(checkbox.dataset.workspaceSelect);
           else state.workspaceSelection.delete(checkbox.dataset.workspaceSelect);
+          renderWorkspaceDialog();
         });
         elements.workspaceList.addEventListener("click", async (event) => {
           const assignmentButton = event.target.closest("[data-window-map-action]");
@@ -3787,7 +4027,13 @@
           }
           copyText(entries.map(commandWithFolder).join("\n"), `${entries.length} resume command${entries.length === 1 ? "" : "s"} copied`);
         });
-        elements.saveWorkspaceButton.addEventListener("click", saveWorkspace);
+        elements.saveWorkspaceButton.addEventListener("click", () => {
+          if (state.workspaceMode === "restart") {
+            void relaunchWorkspace("restart");
+            return;
+          }
+          saveWorkspace();
+        });
         document.querySelector("#closeWorkspaceButton").addEventListener("click", closeWorkspaceDialog);
         elements.cancelWorkspaceButton.addEventListener("click", closeWorkspaceDialog);
         elements.workspaceDialog.addEventListener("click", (event) => {
@@ -3871,6 +4117,7 @@
         elements.importInput.addEventListener("change", (event) => importSessions(event.target.files[0]));
         render();
         renderMission();
+        renderRestartBanner();
         renderWorkspaceBanner();
         updatePrivacyUi();
         loadServerConfig().then(() => {

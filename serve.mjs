@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createReadStream, readFileSync, statSync } from "node:fs";
-import { open, readdir, stat } from "node:fs/promises";
+import { copyFile, mkdir, open, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { homedir } from "node:os";
+import os from "node:os";
 import {
   basename,
   extname,
@@ -14,6 +14,8 @@ import {
   resolve,
 } from "node:path";
 import { countPosixAgentProcesses, countWindowsAgentProcesses } from "./processes.mjs";
+import { buildLiveSnapshot, mergeRestartDetection, parseLiveSnapshot, sessionIdsFromLockNames, snapshotIsPreBoot } from "./liveness.mjs";
+import { detectRestartCasualties, parseShutdownProbeOutput } from "./restart.mjs";
 import { createUsageScanner } from "./usage.mjs";
 import { matchWindowsToSessions, parseVisibleWindowsProbeOutput } from "./windows.mjs";
 
@@ -33,13 +35,24 @@ try {
 const healthPayload = { ok: true };
 if (version) healthPayload.version = version;
 healthPayload.startedAt = startedAt;
-const profileRoot = process.env.USERPROFILE || homedir();
-const defaultScanRoot = process.platform === "win32" ? "C:\\new" : join(homedir(), "new");
+const profileRoot = process.env.USERPROFILE || os.homedir();
+const defaultScanRoot = process.platform === "win32" ? "C:\\new" : join(os.homedir(), "new");
 const scanRoot = resolve(process.env.SESSION_SCAN_ROOT || defaultScanRoot);
 const scanLimit = clampSessionLimit(process.env.SESSION_SCAN_LIMIT, 80, 250);
 const lookupLimit = clampSessionLimit(process.env.SESSION_LOOKUP_LIMIT, 500, 2_000);
 const codexStore = process.env.CODEX_HOME || join(profileRoot, ".codex");
+const codexLockDir = join(codexStore, "thread-writer-locks");
 const claudeStore = process.env.CLAUDE_CONFIG_DIR || join(profileRoot, ".claude");
+const stateDir = resolve(process.env.SESSION_STATE_DIR || (process.platform === "win32"
+  ? join(process.env.LOCALAPPDATA || join(profileRoot, "AppData", "Local"), "SessionIndex")
+  : join(os.homedir(), ".local", "state", "session-index")));
+const liveSnapshotPath = join(stateDir, "live-sessions.json");
+const previousBootSnapshotPath = join(stateDir, "live-sessions.prev-boot.json");
+const livenessEnabled = String(process.env.SESSION_LIVENESS || "on").toLowerCase() !== "off";
+const configuredLivenessInterval = Number(process.env.SESSION_LIVENESS_INTERVAL_MS || 60_000);
+const livenessIntervalMs = Number.isFinite(configuredLivenessInterval)
+  ? Math.min(2_147_483_647, Math.max(15_000, Math.trunc(configuredLivenessInterval)))
+  : 60_000;
 // SESSION_LAUNCH: "on" (default) | "off" | "dry-run" (validate + return the command, spawn nothing)
 const launchMode = ["off", "dry-run"].includes(String(process.env.SESSION_LAUNCH || "").toLowerCase())
   ? String(process.env.SESSION_LAUNCH).toLowerCase()
@@ -227,6 +240,16 @@ function dateOnly(date) {
   return date.toISOString().slice(0, 10);
 }
 
+function sessionActivityDate(records, mtime) {
+  let latestTimeMs = mtime.getTime();
+  for (const record of records) {
+    if (typeof record?.timestamp !== "string") continue;
+    const recordTimeMs = Date.parse(record.timestamp);
+    if (Number.isFinite(recordTimeMs)) latestTimeMs = Math.max(latestTimeMs, recordTimeMs);
+  }
+  return new Date(latestTimeMs);
+}
+
 async function parseCodexSession(candidate) {
   const prefixBytes = 1_250_000;
   const records = await readJsonlPrefix(candidate.filePath, prefixBytes);
@@ -251,6 +274,7 @@ async function parseCodexSession(candidate) {
     .filter(isUsefulPrompt);
   const firstPrompt = prompts[0] || "";
   const fallbackTitle = basename(metadata.cwd) || "Codex session";
+  const activityDate = sessionActivityDate([...records, ...tailRecords], candidate.fileStat.mtime);
 
   return {
     agent: "codex",
@@ -258,8 +282,8 @@ async function parseCodexSession(candidate) {
     title: titleFrom(firstPrompt, fallbackTitle),
     about: cleanText(firstPrompt, 240) || `Codex work in ${metadata.cwd}`,
     folder: metadata.cwd,
-    updatedAt: dateOnly(candidate.fileStat.mtime),
-    activityAt: candidate.fileStat.mtime.toISOString(),
+    updatedAt: dateOnly(activityDate),
+    activityAt: activityDate.toISOString(),
     metadata: {
       model: latestTurnContext?.model,
       effort: latestTurnContext?.effort,
@@ -290,6 +314,7 @@ async function parseClaudeSession(candidate) {
     ? await readJsonlTail(candidate.filePath, candidate.fileStat.size, 640_000)
     : [];
   const recentRecords = [...records, ...tailRecords];
+  const activityDate = sessionActivityDate(recentRecords, candidate.fileStat.mtime);
   const aiTitle = [...recentRecords].reverse().find((record) => record.type === "ai-title")?.aiTitle;
   const lastPrompt = [...recentRecords].reverse().find((record) => record.type === "last-prompt")?.lastPrompt;
   const firstPrompt = records
@@ -331,8 +356,8 @@ async function parseClaudeSession(candidate) {
       cleanText(lastPrompt || firstPrompt, 240) ||
       `Claude Code work in ${cwd}`,
     folder: cwd,
-    updatedAt: dateOnly(candidate.fileStat.mtime),
-    activityAt: candidate.fileStat.mtime.toISOString(),
+    updatedAt: dateOnly(activityDate),
+    activityAt: activityDate.toISOString(),
     metadata: {
       model: latestAssistant?.message?.model,
       effort: latestAssistant?.effort,
@@ -426,7 +451,7 @@ async function probeRunningAgents() {
   try {
     if (process.platform === "win32") {
       const script = "Get-CimInstance Win32_Process -Filter \"Name='claude.exe' or Name='codex.exe'\" | Select-Object Name,CommandLine | ConvertTo-Json -Compress";
-      const output = await runProbe("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script]);
+      const output = await runProbe("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], 8_000);
       const parsed = output.trim() ? JSON.parse(output) : [];
       const { claude, codex } = countWindowsAgentProcesses(parsed);
       return { available: true, claude, codex, checkedAt };
@@ -570,6 +595,225 @@ function getVisibleWindows() {
   return visibleWindowsInFlight;
 }
 
+const lastShutdownScript = [
+  "$ErrorActionPreference='SilentlyContinue'",
+  "$events = Get-WinEvent -FilterHashtable @{LogName='System'; Id=1074,6008,41} -MaxEvents 10",
+  "$result = @($events | ForEach-Object {",
+  "  $planned = $_.Id -eq 1074",
+  "  [pscustomobject]@{",
+  "    shutdownTime = $_.TimeCreated.ToUniversalTime().ToString('o')",
+  "    eventId      = $_.Id",
+  "    planned      = $planned",
+  "    initiator    = ($_.Properties | Select-Object -First 1).Value",
+  "  }",
+  "})",
+  "ConvertTo-Json -InputObject $result -Compress",
+].join("\n");
+
+async function probeLastShutdown() {
+  const unavailable = {
+    available: false,
+    shutdownTimeMs: null,
+    reason: "",
+    planned: null,
+    initiator: "",
+    rebootCount: 0,
+  };
+  if (process.platform !== "win32") return unavailable;
+
+  try {
+    const output = await runProbe(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", lastShutdownScript],
+      8_000,
+    );
+    return parseShutdownProbeOutput(output);
+  } catch {
+    // Shutdown enrichment is optional and must never prevent the app from loading.
+    return unavailable;
+  }
+}
+
+let lastShutdownCache = null;
+let lastShutdownCachedAt = 0;
+let lastShutdownInFlight = null;
+
+function getLastShutdown() {
+  if (lastShutdownCache && Date.now() - lastShutdownCachedAt < 300_000) {
+    return Promise.resolve(lastShutdownCache);
+  }
+  lastShutdownInFlight ||= probeLastShutdown()
+    .then((result) => {
+      lastShutdownCache = result;
+      lastShutdownCachedAt = Date.now();
+      return result;
+    })
+    .finally(() => { lastShutdownInFlight = null; });
+  return lastShutdownInFlight;
+}
+
+const livenessErrors = new Set();
+let livenessInitialization = Promise.resolve(true);
+let livenessTickInFlight = false;
+let lastLiveSessionsJson = null;
+let lastLiveSnapshotWrittenAt = 0;
+
+function logLivenessError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (livenessErrors.has(message)) return;
+  livenessErrors.add(message);
+  console.warn(`Session liveness: ${message}`);
+}
+
+async function readLiveSnapshot(filePath) {
+  try {
+    return parseLiveSnapshot(await readFile(filePath, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function preservePreBootSnapshot() {
+  const snapshot = await readLiveSnapshot(liveSnapshotPath);
+  if (!snapshot) return true;
+  const bootTimeMs = Date.now() - os.uptime() * 1_000;
+  const shutdown = await getLastShutdown();
+  if (snapshotIsPreBoot(snapshot, {
+    bootTimeMs,
+    shutdownTimeMs: shutdown.available ? shutdown.shutdownTimeMs : undefined,
+  })) {
+    await copyFile(liveSnapshotPath, previousBootSnapshotPath);
+  }
+  return true;
+}
+
+function enrichWindowMatches(matched, sessions) {
+  const sessionsByKey = new Map(
+    sessions.map((session) => [session.agent + ":" + session.sessionId, session]),
+  );
+  return matched.map((match) => {
+    const session = sessionsByKey.get(match.agent + ":" + match.sessionId);
+    return {
+      ...match,
+      folder: session?.folder || "",
+      activityAt: session?.activityAt || "",
+    };
+  });
+}
+
+async function writeLivenessHeartbeat() {
+  if (livenessTickInFlight) return;
+  livenessTickInFlight = true;
+  try {
+    const [windows, sessions, processCounts] = await Promise.all([
+      getVisibleWindows(), getCachedLookupSessions(), getRunningAgents(),
+    ]);
+    if (!windows.available && process.platform === "win32") logLivenessError("Window probe unavailable.");
+    if (!processCounts.available) logLivenessError("Running-agent probe unavailable.");
+    const matching = matchWindowsToSessions(windows.available ? windows.windows : [], sessions);
+    const lockNames = await readdir(codexLockDir).catch((error) => {
+      logLivenessError(error);
+      return [];
+    });
+    const lockIds = sessionIdsFromLockNames(lockNames);
+    const codexSessionsById = new Map(sessions
+      .filter((session) => session.agent === "codex")
+      .map((session) => [session.sessionId, session]));
+    const matched = new Map(enrichWindowMatches(matching.matched, sessions)
+      .map((session) => [`${session.agent}:${session.sessionId}`, session]));
+    for (const id of lockIds) {
+      const session = codexSessionsById.get(id);
+      if (!session) {
+        logLivenessError(`Codex lock session ${id} is outside SESSION_SCAN_ROOT or unknown to the current scan.`);
+        continue;
+      }
+      const { agent, sessionId, title, folder, activityAt } = session;
+      matched.set(`${agent}:${sessionId}`, { agent, sessionId, title, folder, activityAt });
+    }
+    // Once written, an empty session list must be able to clear earlier live evidence.
+    if (!matched.size && lastLiveSessionsJson === null) return;
+    const now = Date.now();
+    const snapshot = buildLiveSnapshot({
+      matched: [...matched.values()],
+      unidentifiedCount: matching.unidentified.length,
+      lockCount: lockIds.length,
+      processCounts,
+      now,
+      bootAt: new Date(now - os.uptime() * 1_000).toISOString(),
+    });
+    const sessionsJson = JSON.stringify(snapshot.sessions);
+    if (sessionsJson === lastLiveSessionsJson && now - lastLiveSnapshotWrittenAt < 300_000) return;
+    await mkdir(stateDir, { recursive: true });
+    await writeFile(`${liveSnapshotPath}.tmp`, JSON.stringify(snapshot), "utf8");
+    await rename(`${liveSnapshotPath}.tmp`, liveSnapshotPath);
+    lastLiveSessionsJson = sessionsJson;
+    lastLiveSnapshotWrittenAt = now;
+  } catch (error) {
+    logLivenessError(error);
+  } finally {
+    livenessTickInFlight = false;
+  }
+}
+
+async function getRestartSessionOverview() {
+  const checkedAt = new Date().toISOString();
+  const bootTimeMs = Date.now() - os.uptime() * 1_000;
+  const bootAt = new Date(bootTimeMs).toISOString();
+  let shutdown;
+  try {
+    shutdown = await getLastShutdown();
+  } catch {
+    // Shutdown enrichment is optional and must never prevent the app from loading.
+    shutdown = {
+      available: false,
+      shutdownTimeMs: null,
+      reason: "",
+      planned: null,
+      initiator: "",
+      rebootCount: 0,
+    };
+  }
+
+  let detection = {
+    sessions: [],
+    interruptedAt: null,
+    confidence: "none",
+    clusterSize: 0,
+    sources: { cluster: 0, snapshot: 0 },
+  };
+  try {
+    const sessions = await getCachedLookupSessions();
+    const options = {
+      sessions,
+      bootTimeMs,
+      shutdownTimeMs: shutdown.available ? shutdown.shutdownTimeMs : undefined,
+    };
+    detection = detectRestartCasualties(sessions, options);
+    await livenessInitialization;
+    let snapshot = null;
+    try {
+      snapshot = await readLiveSnapshot(previousBootSnapshotPath);
+    } catch (error) {
+      logLivenessError(error);
+    }
+    detection = mergeRestartDetection(detection, snapshot, options);
+  } catch {
+    // A failed session scan should not turn this best-effort endpoint into an error.
+  }
+
+  return {
+    bootAt,
+    shutdown,
+    interruptedAt: detection.interruptedAt,
+    confidence: detection.confidence,
+    sessions: detection.sessions.map((session) => ({ ...session, source: session.source || "activity" })),
+    clusterSize: detection.clusterSize,
+    sources: detection.sources,
+    checkedAt,
+  };
+}
+
 async function getWindowSessionOverview() {
   const result = await getVisibleWindows();
   const windowCount = Array.isArray(result.windows) ? result.windows.length : 0;
@@ -587,19 +831,9 @@ async function getWindowSessionOverview() {
   try {
     const sessions = await getCachedLookupSessions();
     const matching = matchWindowsToSessions(result.windows, sessions);
-    const sessionsByKey = new Map(
-      sessions.map((session) => [session.agent + ":" + session.sessionId, session]),
-    );
     return {
       available: true,
-      matched: matching.matched.map((match) => {
-        const session = sessionsByKey.get(match.agent + ":" + match.sessionId);
-        return {
-          ...match,
-          folder: session?.folder || "",
-          activityAt: session?.activityAt || "",
-        };
-      }),
+      matched: enrichWindowMatches(matching.matched, sessions),
       unidentified: matching.unidentified,
       ignoredCount: matching.ignored.length,
       windowCount,
@@ -789,6 +1023,8 @@ createServer(async (request, response) => {
       lookupLimit,
       launchToken,
       launchMode,
+      stateDir,
+      liveness: { enabled: livenessEnabled, intervalMs: livenessIntervalMs, codexLockDir },
       platform: process.platform,
       stores: {
         codex: join(codexStore, "sessions"),
@@ -805,6 +1041,11 @@ createServer(async (request, response) => {
 
   if (request.method === "GET" && url.pathname === "/api/windows") {
     sendJson(response, 200, await getWindowSessionOverview());
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/restart") {
+    sendJson(response, 200, await getRestartSessionOverview());
     return;
   }
 
@@ -944,5 +1185,15 @@ createServer(async (request, response) => {
   console.log(`Session scan root: ${scanRoot}`);
   // Warm the larger lookup scan without delaying listen. Window matching and
   // launching can then share the existing short-lived cache.
-  void getCachedLookupSessions().catch(() => {});
+  const lookupWarmup = getCachedLookupSessions().catch(logLivenessError);
+  livenessInitialization = preservePreBootSnapshot().catch((error) => {
+    logLivenessError(error);
+    // Keep the live file intact if preserving pre-boot evidence failed.
+    return false;
+  });
+  void Promise.all([lookupWarmup, livenessInitialization]).then(([, preserved]) => {
+    if (!livenessEnabled || !preserved) return;
+    void writeLivenessHeartbeat();
+    setInterval(() => { void writeLivenessHeartbeat(); }, livenessIntervalMs).unref();
+  }).catch(logLivenessError);
 });

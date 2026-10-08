@@ -7,7 +7,7 @@ Session Index is designed to be inspectable and local-only. It has no telemetry,
 When you press **Scan projects**, or after you explicitly enable auto-scan, the server reads JSONL session logs from the configured Codex and Claude Code profile directories. It extracts only the fields needed by the list:
 
 - provider and session ID;
-- recorded working directory and last-modified time;
+- recorded working directory and activity time (the newer of file modification time and valid log-record timestamps);
 - a detected title and a prompt excerpt of at most 240 characters;
 - available model, token/context, effort, branch, count, and log-size metadata.
 
@@ -17,9 +17,23 @@ For Codex, the detected summary is the first useful user prompt. For Claude Code
 
 ## What open-window detection reads
 
-On Windows, opening **Remember open sessions** makes the local server inspect visible top-level windows owned only by recognized terminal-host processes. It reads those terminal window titles together with each window's process ID and local process name; titles belonging to all other applications are filtered out before they can enter the server process. Terminal window titles can contain task descriptions. Session Index uses them only to match open terminal windows to the scanned session list.
+On Windows, opening **Remember open sessions**, or running the enabled live-session heartbeat, makes the local server inspect visible top-level windows owned only by recognized terminal-host processes. It reads those terminal window titles together with each window's process ID and local process name; titles belonging to all other applications are filtered out before they can enter the server process. Terminal window titles can contain task descriptions. Session Index uses them only to match open terminal windows to the scanned session list.
 
-Window-probe results are cached in server memory for up to twenty seconds. The larger session lookup used for matching and relaunch validation is warmed in the background at server start and cached for fifteen seconds. Neither cache is written to disk. The raw terminal-window list never leaves the server. The workspace dialog receives matched session details, counts, and unmatched terminal titles only; every title shown under **Windows needing assignment** belongs to a recognized terminal host. Nothing is sent outside the local Session Index page. macOS and Linux do not attempt window enumeration; the dialog falls back to recently active sessions.
+Window-probe results are cached in server memory for up to twenty seconds. The larger session lookup used for matching and relaunch validation is warmed in the background at server start and cached for fifteen seconds. These caches remain in memory; the heartbeat writes only the selected matched-session fields and counts described below. The raw terminal-window list never leaves the server. The workspace dialog receives matched session details, counts, and unmatched terminal titles only; every title shown under **Windows needing assignment** belongs to a recognized terminal host. Nothing is sent outside the local Session Index page. macOS and Linux do not attempt window enumeration; the dialog falls back to recently active sessions.
+
+## What the live-session snapshot stores
+
+While the server runs on Windows, macOS, or Linux, the heartbeat writes `live-sessions.json` containing exactly a format version (`version: 1`), save time (`savedAt`), operating-system boot time (`bootAt`), matched sessions (`sessions`), unidentified-window count (`unidentifiedCount`), valid Codex lock-ID count before matching (`lockCount`), and running-agent counts (`processCounts.claude` and `processCounts.codex`, or null when unavailable). Older snapshots without `lockCount` remain readable. Each session stores only its agent, session ID, detected title from the session log, folder, and activity time (`agent`, `sessionId`, `title`, `folder`, `activityAt`). No raw window titles, process IDs, process names, or command lines are written. Detected session titles can contain prompt-derived text.
+
+On every platform, the heartbeat also reads only file names in Codex's `<CODEX_HOME>/thread-writer-locks` directory to learn which Codex sessions are open, including desktop-app sessions with no terminal window and TUI windows titled only `codex`. It ignores dotfiles such as `.coordination.lock`, non-`.lock` names, and invalid session IDs. No lock file content is read (the files are empty), and nothing from a lock name beyond the session ID is stored. Lock IDs must match Codex sessions in the current scan; unknown IDs and sessions outside `SESSION_SCAN_ROOT` are dropped. The snapshot merges these sessions with Windows terminal matches without duplicating a session.
+
+The files stay on this machine in `SESSION_STATE_DIR`, defaulting to `%LOCALAPPDATA%\SessionIndex` on Windows (or `%USERPROFILE%\AppData\Local\SessionIndex` if `LOCALAPPDATA` is missing) and `~/.local/state/session-index` elsewhere. A live write first uses `live-sessions.json.tmp`, then atomically renames it. Startup copies qualifying pre-boot evidence to `live-sessions.prev-boot.json`, which restart detection reads and checks against the current boot and shutdown time. It does not copy transcripts or browser notes.
+
+Set `SESSION_LIVENESS=off` to disable heartbeat collection and writes. Existing snapshot files remain local and can still supply restart evidence; disabling the heartbeat does not delete them. The default interval is 60 seconds (`SESSION_LIVENESS_INTERVAL_MS`, minimum 15 seconds), with unchanged session lists refreshed after five minutes. Lock-based heartbeats run on every platform; terminal window enumeration remains Windows-only.
+
+## What restart detection reads
+
+The `/api/restart` endpoint compares session last-activity times with the current boot time reported by the local operating system and merges qualifying entries from the preserved live-session snapshot. On Windows only, a best-effort probe reads up to ten recent shutdown records from the local System event log to obtain their times, event IDs, planned statuses, and initiating processes. Records no more than fifteen minutes apart are treated as one reboot sequence; its earliest event supplies the effective shutdown time and short reason, and the response includes the sequence count. These fields are used only to match the interruption evidence and explain the restart. The probe does not require elevation, does not read prompt text, makes no network requests, and is cached in server memory for five minutes. If the shutdown probe is unavailable, boot time supplies the snapshot's age reference and the activity-cluster baseline. Without a qualifying snapshot, restart detection uses log activity alone.
 
 ## What the utilization endpoint reads
 
@@ -32,7 +46,7 @@ kept in server memory, not written to disk.
 
 ## What the browser stores
 
-Saved sessions, detected excerpts, custom names and summaries, follow-up state, review-queue state, and follow-up notes are stored in browser localStorage under `session-index.sessions.v1`. A remembered workspace is stored under `session-index.workspace.v1`; it contains the save time, selected source, recent-activity window, and the selected agents, session IDs, titles, folders, and activity times. It does not store raw window titles. User-made normalized window-title to session assignments are stored under `session-index.window-map.v1`, including the chosen agent and session ID, the remembered session title, and the assignment time. These assignments stay in the browser and are not sent back to the server. The auto-scan choice is stored under `session-index.auto-scan.v1`, and the manual Jules weekly task count under `session-index.jules-tasks.v1`.
+Saved sessions, detected excerpts, custom names and summaries, follow-up state, review-queue state, and follow-up notes are stored in browser localStorage under `session-index.sessions.v1`. A remembered workspace is stored under `session-index.workspace.v1`; it contains the save time, selected source, recent-activity window, and the selected agents, session IDs, titles, folders, and activity times. It does not store raw window titles. User-made normalized window-title to session assignments are stored under `session-index.window-map.v1`, including the chosen agent and session ID, the remembered session title, and the assignment time. These assignments stay in the browser and are not sent back to the server. Dismissing an interrupted-session banner stores only that interruption timestamp under `session-index.restart.v1`, allowing a later restart to show a new banner. The auto-scan choice is stored under `session-index.auto-scan.v1`, and the manual Jules weekly task count under `session-index.jules-tasks.v1`.
 
 Use **Clear all** to remove saved session data from the app, and **Discard** on the workspace banner to remove the remembered workspace. Browser site-data controls can remove all localStorage keys. A manual scan remains available when auto-scan is disabled.
 
@@ -44,7 +58,7 @@ The local launch endpoint starts a terminal with only the fixed `claude --resume
 
 ## Data leaving the machine
 
-The process probe, session scan, and terminal launch all remain on the same machine. The app makes zero outbound network requests. Its HTTP server binds to `127.0.0.1` and accepts only matching localhost Host and Origin values. The Content Security Policy allows connections and assets from the same local origin only.
+The process probe, restart probe, session scan, and terminal launch all remain on the same machine. The app makes zero outbound network requests. Its HTTP server binds to `127.0.0.1` and accepts only matching localhost Host and Origin values. The Content Security Policy allows connections and assets from the same local origin only.
 
 Exported JSON is downloaded by the browser and may contain prompt excerpts, local folder paths, session IDs, custom notes, and resume information. Store and share exports with the same care as the underlying session logs.
 
