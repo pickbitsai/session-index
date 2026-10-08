@@ -38,6 +38,10 @@
         box-sizing: border-box;
       }
 
+      [hidden] {
+        display: none !important;
+      }
+
       html {
         min-width: 320px;
         background: var(--paper);
@@ -133,6 +137,94 @@
 
       .privacy-banner[hidden] {
         display: none;
+      }
+
+      .workspace-banner {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 14px 20px;
+        border-bottom: 1px solid #d9bd70;
+        background: var(--amber-soft);
+      }
+
+      .workspace-banner[hidden] {
+        display: none;
+      }
+
+      .workspace-banner-copy {
+        color: #735f27;
+        font-size: 0.82rem;
+        font-weight: 750;
+      }
+
+      .workspace-banner-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .workspace-banner .button {
+        min-height: 34px;
+        padding: 0 11px;
+        background: rgba(255, 254, 250, 0.75);
+        font-size: 0.76rem;
+      }
+
+      .restart-banner {
+        align-items: flex-start;
+        background: #f7efe0;
+      }
+
+      .restart-banner-main {
+        display: grid;
+        flex: 1;
+        gap: 9px;
+        min-width: 0;
+      }
+
+      .restart-banner-title {
+        display: block;
+        margin-bottom: 3px;
+        color: var(--ink);
+        font-size: 0.9rem;
+      }
+
+      .restart-session-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 6px 12px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .restart-session-list li {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+        color: #735f27;
+        font-size: 0.76rem;
+      }
+
+      .restart-session-list strong,
+      .restart-session-list .restart-folder {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .restart-session-list .restart-folder {
+        color: var(--muted);
+      }
+
+      .restart-source {
+        margin-left: 6px;
+        color: var(--muted);
+        font-size: 0.68rem;
       }
 
       .privacy-banner-copy {
@@ -721,6 +813,10 @@
         width: min(460px, calc(100% - 32px));
       }
 
+      #workspaceDialog {
+        width: min(760px, calc(100% - 32px));
+      }
+
       .dialog-head {
         display: flex;
         align-items: flex-start;
@@ -744,6 +840,301 @@
 
       .session-form {
         padding: 24px 26px 26px;
+      }
+
+      .workspace-body {
+        padding: 20px 26px 26px;
+      }
+
+      .workspace-controls {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin-bottom: 14px;
+      }
+
+      .workspace-controls label {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 0.78rem;
+        font-weight: 750;
+      }
+
+      .workspace-controls select {
+        height: 36px;
+        padding: 0 28px 0 10px;
+        border: 1px solid var(--line-dark);
+        border-radius: 8px;
+        color: var(--ink);
+        background: #fff;
+      }
+
+      .workspace-source-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+
+      .workspace-source-toggle legend {
+        margin-right: 2px;
+        color: var(--muted);
+        font-size: 0.72rem;
+        font-weight: 750;
+      }
+
+      .workspace-source-toggle label {
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        cursor: pointer;
+      }
+
+      .workspace-source-toggle label:has(input:checked) {
+        border-color: var(--green);
+        color: var(--green);
+        background: var(--green-soft);
+      }
+
+      .workspace-source-toggle input {
+        margin: 0;
+        accent-color: var(--green);
+      }
+
+      .window-summary,
+      .launch-disabled {
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 0.76rem;
+        line-height: 1.45;
+      }
+
+      .window-details {
+        display: grid;
+        gap: 10px;
+        margin: 14px 0 0;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.73rem;
+      }
+
+      .window-details h3,
+      .window-details p {
+        margin: 0;
+      }
+
+      .window-details h3 {
+        color: var(--ink);
+        font-size: 0.82rem;
+      }
+
+      .window-details > p {
+        line-height: 1.5;
+      }
+
+      .window-title-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .window-assignment-row {
+        display: grid;
+        grid-template-columns: minmax(150px, 0.7fr) minmax(260px, 1.3fr);
+        gap: 8px 14px;
+        padding: 11px 12px;
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        background: #fafaf7;
+      }
+
+      .window-assignment-title {
+        min-width: 0;
+      }
+
+      .window-assignment-title strong {
+        display: block;
+        overflow: hidden;
+        margin-bottom: 5px;
+        color: var(--ink);
+        font-size: 0.8rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .window-assignment-copy {
+        line-height: 1.45;
+      }
+
+      .window-assignment-controls {
+        display: flex;
+        min-width: 0;
+        align-items: center;
+        gap: 7px;
+      }
+
+      .window-assignment-controls select {
+        width: 100%;
+        min-width: 0;
+        height: 34px;
+        padding: 0 28px 0 9px;
+        border: 1px solid var(--line-dark);
+        border-radius: 8px;
+        color: var(--ink);
+        background: #fff;
+        font-size: 0.72rem;
+      }
+
+      .window-assignment-controls .button {
+        min-height: 34px;
+        padding: 0 10px;
+        font-size: 0.72rem;
+      }
+
+      .assignment-badge {
+        display: inline-flex;
+        width: fit-content;
+        padding: 3px 7px;
+        border-radius: 999px;
+        color: var(--green);
+        background: var(--green-soft);
+        font-size: 0.65rem;
+        font-weight: 800;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .assignment-badge.stale {
+        color: #735f27;
+        background: var(--amber-soft);
+      }
+
+      .launch-disabled {
+        margin: 0 0 14px;
+        padding: 9px 11px;
+        border-radius: 8px;
+        color: #735f27;
+        background: var(--amber-soft);
+      }
+
+      .workspace-list {
+        max-height: min(430px, 52vh);
+        overflow: auto;
+        border: 1px solid var(--line);
+        border-radius: 11px;
+      }
+
+      .workspace-empty {
+        margin: 0;
+        padding: 28px 18px;
+        color: var(--muted);
+        font-size: 0.82rem;
+        text-align: center;
+      }
+
+      .workspace-row {
+        display: grid;
+        grid-template-columns: auto auto minmax(0, 1fr) auto;
+        gap: 10px;
+        align-items: center;
+        min-height: 72px;
+        padding: 11px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .workspace-row:last-child {
+        border-bottom: 0;
+      }
+
+      .workspace-row > input {
+        width: 17px;
+        height: 17px;
+        accent-color: var(--green);
+      }
+
+      .workspace-row .agent-badge {
+        padding: 4px 8px;
+        font-size: 0.68rem;
+      }
+
+      .workspace-session {
+        min-width: 0;
+      }
+
+      .workspace-session strong,
+      .workspace-session span {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .workspace-session strong {
+        margin-bottom: 4px;
+        font-size: 0.82rem;
+      }
+
+      .workspace-session span {
+        color: var(--soft-muted);
+        font-family: var(--mono);
+        font-size: 0.67rem;
+      }
+
+      .workspace-session .assignment-badge {
+        display: inline-flex;
+        margin-top: 6px;
+        color: var(--green);
+        font-family: inherit;
+        font-size: 0.62rem;
+      }
+
+      .workspace-row-side {
+        display: grid;
+        min-width: 130px;
+        justify-items: end;
+        gap: 6px;
+      }
+
+      .workspace-activity,
+      .workspace-status {
+        color: var(--muted);
+        font-size: 0.7rem;
+        text-align: right;
+      }
+
+      .workspace-status.failed {
+        max-width: 250px;
+        color: var(--danger);
+      }
+
+      .workspace-status.launched {
+        color: var(--green);
+      }
+
+      .workspace-row-side .button {
+        min-height: 32px;
+        padding: 0 10px;
+        font-size: 0.72rem;
+      }
+
+      .workspace-actions {
+        display: flex;
+        justify-content: space-between;
+        gap: 9px;
+        margin-top: 18px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+      }
+
+      .workspace-actions > div {
+        display: flex;
+        gap: 9px;
       }
 
       .form-grid {
@@ -1260,6 +1651,19 @@
           flex-direction: column;
         }
 
+        .workspace-banner {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .workspace-banner-actions {
+          flex-wrap: wrap;
+        }
+
+        .restart-session-list {
+          grid-template-columns: 1fr;
+        }
+
         .privacy-banner-actions {
           justify-content: flex-end;
         }
@@ -1355,6 +1759,30 @@
         .privacy-controls {
           align-items: stretch;
           flex-direction: column;
+        }
+
+        .workspace-row {
+          grid-template-columns: auto minmax(0, 1fr);
+        }
+
+        .workspace-row .agent-badge {
+          grid-column: 2;
+          grid-row: 2;
+        }
+
+        .workspace-row-side {
+          grid-column: 1 / -1;
+          justify-items: start;
+          min-width: 0;
+        }
+
+        .workspace-status,
+        .workspace-activity {
+          text-align: left;
+        }
+
+        .window-assignment-row {
+          grid-template-columns: 1fr;
         }
       }
 
@@ -1524,6 +1952,7 @@
               </svg>
               <span>Scan projects</span>
             </button>
+            <button class="button" id="rememberWorkspaceButton" type="button">Remember open sessions</button>
           </div>
           <div class="toolbar-right">
             <div class="filters" role="group" aria-label="Filter sessions">
@@ -1541,6 +1970,60 @@
             </button>
           </div>
         </div>
+
+        <aside class="workspace-banner restart-banner" id="restartBanner" aria-label="Interrupted by restart" hidden>
+          <div class="restart-banner-main">
+            <div class="workspace-banner-copy">
+              <strong class="restart-banner-title">Interrupted by restart</strong>
+              <span id="restartBannerCopy"></span>
+            </div>
+            <ul class="restart-session-list" id="restartSessionList"></ul>
+          </div>
+          <div class="workspace-banner-actions">
+            <button class="button primary" id="relaunchRestartButton" type="button">Relaunch</button>
+            <button class="button" id="reviewRestartButton" type="button">Review</button>
+            <button class="button" id="copyRestartCommandsButton" type="button" hidden>Copy all commands</button>
+            <button class="icon-button" id="dismissRestartButton" type="button" aria-label="Dismiss interrupted sessions banner">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </div>
+        </aside>
+
+        <aside class="workspace-banner restart-banner" id="closureBanner" aria-label="Closed together" hidden>
+          <div class="restart-banner-main">
+            <div class="workspace-banner-copy">
+              <strong class="restart-banner-title">Closed together</strong>
+              <span id="closureBannerCopy"></span>
+            </div>
+            <ul class="restart-session-list" id="closureSessionList"></ul>
+          </div>
+          <div class="workspace-banner-actions">
+            <button class="button primary" id="relaunchClosureButton" type="button">Relaunch</button>
+            <button class="button" id="reviewClosureButton" type="button">Review</button>
+            <button class="button" id="copyClosureCommandsButton" type="button">Copy all commands</button>
+            <button class="icon-button" id="dismissClosureButton" type="button" aria-label="Dismiss closed together banner">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </div>
+        </aside>
+
+        <aside class="workspace-banner" id="workspaceBanner" aria-label="Saved workspace" hidden>
+          <span class="workspace-banner-copy" id="workspaceBannerCopy"></span>
+          <div class="workspace-banner-actions">
+            <button class="button primary" id="relaunchWorkspaceButton" type="button">Relaunch all</button>
+            <button class="button" id="reviewWorkspaceButton" type="button">Review</button>
+            <button class="button" id="discardWorkspaceButton" type="button">Discard</button>
+            <button class="icon-button" id="dismissWorkspaceButton" type="button" aria-label="Dismiss saved workspace banner">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </div>
+        </aside>
 
         <div class="table-head" aria-hidden="true">
           <span>Session</span>
@@ -1725,6 +2208,61 @@
       </div>
     </dialog>
 
+    <dialog id="workspaceDialog" aria-labelledby="workspaceTitle">
+      <div class="dialog-head">
+        <div>
+          <h2 id="workspaceTitle">Remember what's open</h2>
+          <p id="workspaceDescription">
+            Open terminal windows are matched to sessions by their visible titles. Unmatched windows are listed separately; you can switch to recently active sessions.
+          </p>
+        </div>
+        <button class="icon-button" id="closeWorkspaceButton" type="button" aria-label="Close workspace dialog">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="m6 6 12 12M18 6 6 18" />
+          </svg>
+        </button>
+      </div>
+      <div class="workspace-body">
+        <div class="workspace-controls" id="workspaceControls">
+          <fieldset class="workspace-source-toggle" id="workspaceSourceToggle" hidden>
+            <legend>Session source</legend>
+            <label>
+              <input type="radio" name="workspaceSource" value="windows" />
+              <span>Open windows</span>
+            </label>
+            <label>
+              <input type="radio" name="workspaceSource" value="recent" />
+              <span>Recently active</span>
+            </label>
+          </fieldset>
+          <label for="workspaceWindow" id="workspaceWindowControl" hidden>
+            Recently active within
+            <select id="workspaceWindow">
+              <option value="1">1 hour</option>
+              <option value="4" selected>4 hours</option>
+              <option value="12">12 hours</option>
+              <option value="24">24 hours</option>
+            </select>
+          </label>
+        </div>
+        <p class="launch-disabled" id="launchDisabled" hidden>The local server is not reachable, so sessions cannot be relaunched from here. Copy the commands instead.</p>
+        <div class="workspace-list" id="workspaceList"></div>
+        <p class="window-summary" id="windowSummary">Checking open-window detection…</p>
+        <section class="window-details" id="windowDetails" aria-labelledby="windowDetailsTitle" hidden>
+          <h3 id="windowDetailsTitle">Windows needing assignment</h3>
+          <p>A renamed tab or an untitled session can be assigned to a local session below and remembered. Each assignment is your manual claim, not an automatic detection.</p>
+          <div class="window-title-list" id="windowTitleList"></div>
+        </section>
+        <div class="workspace-actions">
+          <button class="button" id="copyWorkspaceCommandsButton" type="button">Copy all commands</button>
+          <div>
+            <button class="button" id="cancelWorkspaceButton" type="button">Cancel</button>
+            <button class="button primary" id="saveWorkspaceButton" type="button">Save workspace</button>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
     <dialog id="confirmDialog" aria-labelledby="confirmTitle">
       <div class="confirm-copy">
         <h2 id="confirmTitle">Clear all sessions?</h2>
@@ -1738,17 +2276,47 @@
 
     <div class="toast-region" id="toastRegion" role="status" aria-live="polite" aria-atomic="true"></div>
 
-    <script>
+    <script src="./launch-state.js"></script>
+    <script type="module">
+      import { applyWindowMap, getAssignableSessions, normalizeWindowTitle } from "./windows.mjs";
+
       (() => {
         "use strict";
 
+        const { classifyLaunchAvailability, launchUnavailableMessage } = globalThis.SessionIndexLaunchState;
+
         const STORAGE_KEY = "session-index.sessions.v1";
+        const WORKSPACE_KEY = "session-index.workspace.v1";
+        const WINDOW_MAP_KEY = "session-index.window-map.v1";
+        const RESTART_KEY = "session-index.restart.v1";
+        const CLOSURES_KEY = "session-index.closures.v1";
         const SCAN_PREF_KEY = "session-index.auto-scan.v1";
         const JULES_KEY = "session-index.jules-tasks.v1";
         const initialSessions = loadSessions();
+        const initialWorkspace = loadWorkspace();
+        const initialWindowMap = loadWindowMap();
+        const initialRestartDismissal = loadRestartDismissal();
         const storedScanPreference = readScanPreference();
         const state = {
           sessions: initialSessions,
+          workspace: initialWorkspace,
+          workspaceDismissed: false,
+          workspaceMode: "remember",
+          workspaceSource: "windows",
+          workspaceWindowHours: 4,
+          workspaceSelection: new Set(),
+          workspaceStatuses: new Map(),
+          workspaceLaunching: false,
+          restart: null,
+          restartChecked: false,
+          restartDismissedAt: initialRestartDismissal,
+          closures: [],
+          closure: null,
+          closureReview: null,
+          dismissedClosures: loadClosureDismissals(),
+          openWindows: null,
+          openWindowsServer: null,
+          windowMap: initialWindowMap,
           filter: "all",
           folder: "all",
           query: "",
@@ -1757,6 +2325,10 @@
           autoScan: storedScanPreference === "enabled",
           privacyDismissed: storedScanPreference === "disabled",
           scanRoot: "your project root",
+          launchToken: "",
+          launchMode: "off",
+          platform: "",
+          launchAvailability: "loading",
           usage: null,
           usageLoading: false,
           usageError: false,
@@ -1773,7 +2345,41 @@
           folderFilter: document.querySelector("#folderFilter"),
           filterButtons: [...document.querySelectorAll(".filter-button")],
           scanButton: document.querySelector("#scanButton"),
+          rememberWorkspaceButton: document.querySelector("#rememberWorkspaceButton"),
           scanStatus: document.querySelector("#scanStatus"),
+          restartBanner: document.querySelector("#restartBanner"),
+          restartBannerCopy: document.querySelector("#restartBannerCopy"),
+          restartSessionList: document.querySelector("#restartSessionList"),
+          relaunchRestartButton: document.querySelector("#relaunchRestartButton"),
+          reviewRestartButton: document.querySelector("#reviewRestartButton"),
+          copyRestartCommandsButton: document.querySelector("#copyRestartCommandsButton"),
+          dismissRestartButton: document.querySelector("#dismissRestartButton"),
+          closureBanner: document.querySelector("#closureBanner"),
+          closureBannerCopy: document.querySelector("#closureBannerCopy"),
+          closureSessionList: document.querySelector("#closureSessionList"),
+          relaunchClosureButton: document.querySelector("#relaunchClosureButton"),
+          reviewClosureButton: document.querySelector("#reviewClosureButton"),
+          copyClosureCommandsButton: document.querySelector("#copyClosureCommandsButton"),
+          dismissClosureButton: document.querySelector("#dismissClosureButton"),
+          workspaceBanner: document.querySelector("#workspaceBanner"),
+          workspaceBannerCopy: document.querySelector("#workspaceBannerCopy"),
+          relaunchWorkspaceButton: document.querySelector("#relaunchWorkspaceButton"),
+          workspaceDialog: document.querySelector("#workspaceDialog"),
+          workspaceTitle: document.querySelector("#workspaceTitle"),
+          workspaceDescription: document.querySelector("#workspaceDescription"),
+          workspaceControls: document.querySelector("#workspaceControls"),
+          workspaceSourceToggle: document.querySelector("#workspaceSourceToggle"),
+          workspaceSourceInputs: [...document.querySelectorAll('input[name="workspaceSource"]')],
+          workspaceWindowControl: document.querySelector("#workspaceWindowControl"),
+          workspaceWindow: document.querySelector("#workspaceWindow"),
+          launchDisabled: document.querySelector("#launchDisabled"),
+          workspaceList: document.querySelector("#workspaceList"),
+          windowSummary: document.querySelector("#windowSummary"),
+          windowDetails: document.querySelector("#windowDetails"),
+          windowTitleList: document.querySelector("#windowTitleList"),
+          copyWorkspaceCommandsButton: document.querySelector("#copyWorkspaceCommandsButton"),
+          cancelWorkspaceButton: document.querySelector("#cancelWorkspaceButton"),
+          saveWorkspaceButton: document.querySelector("#saveWorkspaceButton"),
           privacyBanner: document.querySelector("#privacyBanner"),
           privacyDialog: document.querySelector("#privacyDialog"),
           autoScanDescription: document.querySelector("#autoScanDescription"),
@@ -1827,6 +2433,95 @@
             console.warn("Could not load saved sessions", error);
             return [];
           }
+        }
+
+        function loadWorkspace() {
+          try {
+            const raw = localStorage.getItem(WORKSPACE_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== "object" || typeof parsed.savedAt !== "string" || ![1, 4, 12, 24].includes(parsed.windowHours) || !Array.isArray(parsed.entries)) return null;
+            return {
+              savedAt: parsed.savedAt,
+              windowHours: parsed.windowHours,
+              entries: parsed.entries.filter(isValidWorkspaceEntry).map((entry) => ({
+                agent: entry.agent,
+                sessionId: entry.sessionId,
+                title: entry.title,
+                folder: entry.folder,
+                activityAt: entry.activityAt,
+              })),
+            };
+          } catch (error) {
+            console.warn("Could not load saved workspace", error);
+            return null;
+          }
+        }
+
+        function loadRestartDismissal() {
+          try {
+            const raw = localStorage.getItem(RESTART_KEY);
+            if (!raw) return "";
+            const parsed = JSON.parse(raw);
+            return typeof parsed?.interruptedAt === "string" ? parsed.interruptedAt : "";
+          } catch (error) {
+            console.warn("Could not load the dismissed restart", error);
+            return "";
+          }
+        }
+
+        function loadClosureDismissals() {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(CLOSURES_KEY) || "[]");
+            return Array.isArray(parsed) ? parsed.filter((value) => (
+              typeof value === "string" && Number.isFinite(Date.parse(value))
+            )).slice(-20) : [];
+          } catch (error) {
+            console.warn("Could not load dismissed closures", error);
+            return [];
+          }
+        }
+
+        function loadWindowMap() {
+          try {
+            const raw = localStorage.getItem(WINDOW_MAP_KEY);
+            if (!raw) return {};
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+            const windowMap = Object.create(null);
+            for (const [windowTitle, assignment] of Object.entries(parsed)) {
+              const normalizedTitle = normalizeWindowTitle(windowTitle);
+              if (
+                !normalizedTitle ||
+                !assignment ||
+                !["codex", "claude"].includes(assignment.agent) ||
+                typeof assignment.sessionId !== "string" ||
+                !assignment.sessionId ||
+                typeof assignment.assignedAt !== "string"
+              ) continue;
+              windowMap[normalizedTitle] = {
+                agent: assignment.agent,
+                sessionId: assignment.sessionId,
+                assignedAt: assignment.assignedAt,
+                title: typeof assignment.title === "string" ? assignment.title : "",
+              };
+            }
+            return windowMap;
+          } catch (error) {
+            console.warn("Could not load window assignments", error);
+            return {};
+          }
+        }
+
+        function isValidWorkspaceEntry(entry) {
+          return (
+            entry &&
+            ["codex", "claude"].includes(entry.agent) &&
+            typeof entry.sessionId === "string" &&
+            typeof entry.title === "string" &&
+            typeof entry.folder === "string" &&
+            typeof entry.activityAt === "string"
+          );
         }
 
         function readScanPreference() {
@@ -1937,6 +2632,23 @@
           }
         }
 
+        function saveWindowMap() {
+          try {
+            localStorage.setItem(WINDOW_MAP_KEY, JSON.stringify(state.windowMap));
+            return true;
+          } catch (error) {
+            showToast("This browser could not save the window assignment");
+            console.error(error);
+            return false;
+          }
+        }
+
+        function refreshWindowAssignments() {
+          state.openWindows = state.openWindowsServer
+            ? applyWindowMap(state.openWindowsServer, state.sessions, state.windowMap)
+            : null;
+        }
+
         function updatePrivacyUi() {
           elements.privacyBanner.hidden = state.autoScan || state.privacyDismissed;
           document.querySelectorAll("[data-scan-root]").forEach((element) => {
@@ -1967,14 +2679,40 @@
 
         async function loadServerConfig() {
           try {
-            const response = await fetch("/api/config", { headers: { Accept: "application/json" } });
-            if (!response.ok) return;
-            const config = await response.json();
+            let response;
+            try {
+              response = await fetch("/api/config", { headers: { Accept: "application/json" } });
+            } catch {
+              state.launchAvailability = classifyLaunchAvailability({ configReachable: false });
+              return;
+            }
+
+            let config = null;
+            if (response.ok) {
+              try {
+                config = await response.json();
+              } catch {
+                // A reachable server with an incompatible response is not the current build.
+              }
+            }
+            if (!config || typeof config !== "object") {
+              state.launchAvailability = classifyLaunchAvailability({ configReachable: true });
+              return;
+            }
             if (typeof config.scanRoot === "string" && config.scanRoot) state.scanRoot = config.scanRoot;
-          } catch {
-            // The rest of the tracker still works when opened without the local server.
+            if (typeof config.launchToken === "string" && config.launchToken) state.launchToken = config.launchToken;
+            if (["on", "off", "dry-run"].includes(config.launchMode)) state.launchMode = config.launchMode;
+            if (typeof config.platform === "string") state.platform = config.platform;
+            state.launchAvailability = classifyLaunchAvailability({
+              configReachable: true,
+              launchToken: state.launchToken,
+              launchMode: state.launchMode,
+            });
           } finally {
             updatePrivacyUi();
+            renderRestartBanner();
+            renderWorkspaceBanner();
+            if (elements.workspaceDialog.open) renderWorkspaceDialog();
           }
         }
 
@@ -2012,6 +2750,35 @@
           return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: date.getFullYear() === current.getFullYear() ? undefined : "numeric" }).format(date);
         }
 
+        function formatRelativeTime(value) {
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return "at an unknown time";
+          const elapsed = Math.max(0, Date.now() - date.getTime());
+          const minutes = Math.floor(elapsed / 60_000);
+          if (minutes < 1) return "just now";
+          if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+          const hours = Math.floor(minutes / 60);
+          if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+          const days = Math.floor(hours / 24);
+          if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+          return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(date);
+        }
+
+        function formatRestartTime(value) {
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return "an unknown time";
+          const datePart = new Intl.DateTimeFormat(undefined, {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }).format(date);
+          const timePart = new Intl.DateTimeFormat(undefined, {
+            hour: "numeric",
+            minute: "2-digit",
+          }).format(date);
+          return `${datePart} at ${timePart}`;
+        }
+
         function resumeCommand(session) {
           const quotedId = quoteShellArg(session.sessionId.trim());
           return session.agent === "codex"
@@ -2022,6 +2789,554 @@
         function quoteShellArg(value) {
           if (/^[A-Za-z0-9._:@/\\-]+$/.test(value)) return value;
           return `'${value.replaceAll("'", "''")}'`;
+        }
+
+        function launchIsAvailable() {
+          return state.launchAvailability === "available";
+        }
+
+        function workspaceKey(entry) {
+          return `${entry.agent}:${entry.sessionId}`;
+        }
+
+        function sessionActivityAt(session) {
+          if (typeof session.activityAt === "string" && !Number.isNaN(new Date(session.activityAt).getTime())) return session.activityAt;
+          const fallback = new Date(`${session.updatedAt}T12:00:00`);
+          return Number.isNaN(fallback.getTime()) ? new Date(0).toISOString() : fallback.toISOString();
+        }
+
+        function workspaceEntryFromSession(session) {
+          return {
+            agent: session.agent,
+            sessionId: session.sessionId,
+            title: displayTitle(session),
+            folder: session.folder,
+            activityAt: sessionActivityAt(session),
+          };
+        }
+
+        function currentWorkspaceEntries() {
+          if (state.workspaceMode === "restore") return state.workspace?.entries || [];
+          if (state.workspaceMode === "restart") return state.restart?.sessions || [];
+          if (state.workspaceMode === "closure") return (state.closureReview?.sessions || [])
+            .filter((entry) => entry.status === "pending");
+          if (state.workspaceSource === "windows") {
+            return (state.openWindows?.matched || [])
+              .filter((entry) => ["claude", "codex"].includes(entry.agent) && entry.sessionId && entry.folder)
+              .map((entry) => ({
+                agent: entry.agent,
+                sessionId: entry.sessionId,
+                 title: entry.title || entry.windowTitle || "Untitled session",
+                 folder: entry.folder,
+                 activityAt: entry.activityAt || new Date(0).toISOString(),
+                 confidence: entry.confidence,
+                 windowTitle: entry.windowTitle,
+               }));
+          }
+          return state.sessions
+            .map(workspaceEntryFromSession)
+            .sort((a, b) => b.activityAt.localeCompare(a.activityAt));
+        }
+
+        function selectRecentWorkspaceEntries() {
+          const cutoff = Date.now() - state.workspaceWindowHours * 60 * 60_000;
+          state.workspaceSelection = new Set(
+            currentWorkspaceEntries()
+              .filter((entry) => new Date(entry.activityAt).getTime() >= cutoff)
+              .map(workspaceKey),
+          );
+        }
+
+        function selectOpenWindowEntries() {
+          state.workspaceSelection = new Set(currentWorkspaceEntries().map(workspaceKey));
+        }
+
+        function renderRestartBanner() {
+          const restart = state.restart;
+          const visible = Boolean(
+            restart &&
+            restart.confidence !== "none" &&
+            restart.sessions.length &&
+            restart.interruptedAt !== state.restartDismissedAt
+          );
+          elements.restartBanner.hidden = !visible;
+          renderClosureBanner();
+          if (!visible) return;
+
+          const count = restart.sessions.length;
+          const verb = restart.confidence === "low"
+            ? "may have been interrupted"
+            : count === 1
+              ? "was interrupted"
+              : "were interrupted";
+          const reason = restart.shutdown?.available ? restart.shutdown.reason : "";
+          const rebootCount = Number.isInteger(restart.shutdown?.rebootCount)
+            ? restart.shutdown.rebootCount
+            : 0;
+          const restartDetails = [
+            reason,
+            rebootCount > 1 ? `${rebootCount} restarts` : "",
+          ].filter(Boolean).join("; ");
+          elements.restartBannerCopy.textContent = `${count} session${count === 1 ? "" : "s"} ${verb} by a restart on ${formatRestartTime(restart.interruptedAt)}${restartDetails ? ` (${restartDetails})` : ""}.`;
+          renderRecoverySessionList(elements.restartSessionList, restart.sessions, true);
+          elements.relaunchRestartButton.hidden = !launchIsAvailable();
+          elements.relaunchRestartButton.disabled = state.workspaceLaunching || count === 0;
+          elements.copyRestartCommandsButton.hidden = launchIsAvailable();
+          elements.copyRestartCommandsButton.disabled = state.launchAvailability === "loading" || count === 0;
+        }
+
+        function renderRecoverySessionList(list, sessions, restarting = false) {
+          list.replaceChildren(...sessions.map((entry) => {
+            const item = document.createElement("li");
+            const badge = document.createElement("span");
+            badge.className = `agent-badge ${entry.agent}`;
+            badge.textContent = entry.agent === "codex" ? "Codex" : "Claude";
+            const title = document.createElement("strong");
+            title.title = entry.title;
+            title.textContent = entry.title;
+            const folder = document.createElement("span");
+            folder.className = "restart-folder";
+            folder.title = entry.folder;
+            folder.textContent = entry.folder.split(/[\\/]/u).filter(Boolean).pop() || entry.folder;
+            if (restarting && entry.source === "snapshot") {
+              const source = document.createElement("span");
+              source.className = "restart-source";
+              source.title = "Seen open in a terminal window shortly before the shutdown";
+              source.textContent = "open at shutdown";
+              folder.append(source);
+            }
+            item.append(badge, title, folder);
+            return item;
+          }));
+        }
+
+        function renderClosureBanner() {
+          const restartKeys = new Set(elements.restartBanner.hidden ? [] : state.restart.sessions.map(workspaceKey));
+          state.closure = state.closures.find((closure) => {
+            const pending = closure.sessions.filter((entry) => entry.status === "pending");
+            return pending.length && !state.dismissedClosures.includes(closure.closedAt) &&
+              !pending.every((entry) => restartKeys.has(workspaceKey(entry)));
+          }) || null;
+          elements.closureBanner.hidden = !state.closure;
+          if (!state.closure) return;
+          const closure = state.closure;
+          const pending = closure.sessions.filter((entry) => entry.status === "pending");
+          elements.closureBannerCopy.textContent = `${closure.sessions.length} sessions closed on ${formatRestartTime(closure.closedAt)} · ${closure.resumedCount} resumed`;
+          renderRecoverySessionList(elements.closureSessionList, pending);
+          elements.relaunchClosureButton.hidden = !launchIsAvailable();
+          elements.relaunchClosureButton.disabled = state.workspaceLaunching;
+          elements.copyClosureCommandsButton.disabled = state.launchAvailability === "loading";
+        }
+
+        function renderWorkspaceBanner() {
+          const visible = Boolean(state.workspace) && !state.workspaceDismissed;
+          elements.workspaceBanner.hidden = !visible;
+          if (!visible) return;
+          const count = state.workspace.entries.length;
+          elements.workspaceBannerCopy.textContent = `Workspace saved ${formatRelativeTime(state.workspace.savedAt)} · ${count} session${count === 1 ? "" : "s"}`;
+          elements.relaunchWorkspaceButton.hidden = !launchIsAvailable();
+          elements.relaunchWorkspaceButton.disabled = state.workspaceLaunching || count === 0;
+        }
+
+        function repeatedWindowTitleSummary(titles) {
+          const counts = new Map();
+          titles.forEach((title) => counts.set(title, (counts.get(title) || 0) + 1));
+          const repeated = [...counts.entries()]
+            .filter(([, count]) => count > 1)
+            .map(([title, count]) => count + ' titled "' + title + '"');
+          return repeated.length ? " (" + repeated.join(", ") + ")" : "";
+        }
+
+        function windowAssignmentOptions(candidates) {
+          return candidates.map((session) => {
+            const leaf = session.folder.split(/[\\/]/).filter(Boolean).pop() || session.folder;
+            const label = `${displayTitle(session)} - ${leaf}`;
+            return `<option value="${escapeHtml(workspaceKey(session))}" title="${escapeHtml(session.folder)}">${escapeHtml(label)}</option>`;
+          }).join("");
+        }
+
+        function windowAssignmentRow(windowTitle, candidates, issue) {
+          const normalizedTitle = normalizeWindowTitle(windowTitle);
+          const picker = candidates.length
+            ? `<div class="window-assignment-controls">
+                <select data-window-assignment-picker aria-label="Session for ${escapeHtml(windowTitle)}">
+                  <option value="">Choose a local session...</option>
+                  ${windowAssignmentOptions(candidates)}
+                </select>
+                <button class="button" type="button" data-window-map-action="${issue ? "reassign" : "assign"}" disabled>${issue ? "Reassign" : "Assign"}</button>
+                ${issue ? '<button class="button ghost" type="button" data-window-map-action="forget">Forget</button>' : ""}
+              </div>`
+            : issue
+              ? '<div class="window-assignment-controls"><button class="button" type="button" data-window-map-action="reassign" title="No unmatched local session is available" disabled>Reassign</button><button class="button ghost" type="button" data-window-map-action="forget">Forget</button></div>'
+              : "";
+          let copy = "Choose an unmatched local session. This assignment is your manual claim, not an automatic detection.";
+          let badge = "";
+          if (issue) {
+            const rememberedTitle = issue.assignment.title || `${issue.assignment.agent} ${issue.assignment.sessionId}`;
+            badge = `<span class="assignment-badge stale">${issue.state === "stale" ? "stale" : "needs review"}</span>`;
+            copy = issue.state === "stale"
+              ? `Remembered session: ${escapeHtml(rememberedTitle)}. That session is no longer in the local scan. It will not be assigned or relaunched unless you reassign it.`
+              : `Remembered session: ${escapeHtml(rememberedTitle)}. That session is already matched to another window. Reassign or forget this claim.`;
+            if (!candidates.length) {
+              copy += " No unmatched local session log is available to reassign; this can happen for a remote session or a folder outside SESSION_SCAN_ROOT.";
+            }
+          } else if (!candidates.length) {
+            copy = "No unmatched local session log is available. This may be a remote session or a folder outside SESSION_SCAN_ROOT, so it cannot be assigned or relaunched from here.";
+          }
+          return `<div class="window-assignment-row" data-window-title="${escapeHtml(normalizedTitle)}">
+            <div class="window-assignment-title">
+              <strong title="${escapeHtml(windowTitle)}">${escapeHtml(windowTitle)}</strong>
+              ${badge}
+            </div>
+            <div class="window-assignment-copy">${copy}</div>
+            <span></span>
+            ${picker}
+          </div>`;
+        }
+
+        function renderWindowDetection(remembering) {
+          elements.windowSummary.hidden = !remembering;
+          elements.windowDetails.hidden = true;
+          if (!remembering) return;
+
+          if (!state.openWindows) {
+            elements.windowSummary.textContent = "Checking open-window detection…";
+            return;
+          }
+          if (!state.openWindows.available) {
+            elements.windowSummary.textContent = "Open-window detection is unavailable on this system.";
+            return;
+          }
+          if (state.workspaceSource !== "windows") {
+            elements.windowSummary.hidden = true;
+            return;
+          }
+
+          const total = state.openWindows.windowCount;
+          const matched = state.openWindows.matched.length;
+          const unidentified = state.openWindows.unidentified;
+          const ignored = state.openWindows.ignoredCount;
+          elements.windowSummary.textContent =
+            total + " open window" + (total === 1 ? "" : "s") +
+            " · " + matched + " matched to sessions" +
+            " · " + unidentified.length + " could not be identified" +
+            repeatedWindowTitleSummary(unidentified) +
+            " · " + ignored + " ignored (not agent windows)";
+
+          if (unidentified.length) {
+            const candidates = getAssignableSessions(state.sessions, state.openWindows.matched);
+            const issues = [...(state.openWindows.assignmentIssues || [])];
+            elements.windowTitleList.innerHTML = unidentified
+              .map((title) => {
+                const normalizedTitle = normalizeWindowTitle(title);
+                const issueIndex = issues.findIndex((item) => item.normalizedTitle === normalizedTitle);
+                const issue = issueIndex >= 0 ? issues.splice(issueIndex, 1)[0] : null;
+                return windowAssignmentRow(title, candidates, issue);
+              })
+              .join("");
+            elements.windowDetails.hidden = false;
+          }
+        }
+
+        function workspaceRow(entry) {
+          const key = workspaceKey(entry);
+          const remembering = state.workspaceMode === "remember";
+          const selectable = remembering || ["restart", "closure"].includes(state.workspaceMode);
+          const checked = state.workspaceSelection.has(key);
+          const agentName = entry.agent === "codex" ? "Codex" : "Claude";
+          const folderLeaf = entry.folder.split(/[\\/]/).filter(Boolean).pop() || entry.folder;
+          const status = state.workspaceStatuses.get(key);
+          const manuallyAssigned = entry.confidence === "manual";
+          let statusMarkup = `<span class="workspace-activity">${escapeHtml(formatRelativeTime(entry.activityAt))}</span>`;
+          if (status?.state === "pending") statusMarkup += '<span class="workspace-status">Launching…</span>';
+          if (status?.state === "launched") statusMarkup += `<span class="workspace-status launched">Launched with ${escapeHtml(status.detail)}</span>`;
+          if (status?.state === "failed") {
+            statusMarkup += `<span class="workspace-status failed">Failed: ${escapeHtml(status.detail)}</span><button class="button" type="button" data-workspace-action="copy" data-agent="${entry.agent}" data-session-id="${escapeHtml(entry.sessionId)}">Copy command</button>`;
+          } else if (!remembering && launchIsAvailable() && status?.state !== "pending") {
+            statusMarkup += `<button class="button" type="button" data-workspace-action="launch" data-agent="${entry.agent}" data-session-id="${escapeHtml(entry.sessionId)}">Launch</button>`;
+          }
+          if (remembering && manuallyAssigned) {
+            statusMarkup += `<button class="button ghost" type="button" data-window-map-action="clear" data-window-title="${escapeHtml(normalizeWindowTitle(entry.windowTitle))}">Clear assignment</button>`;
+          }
+          return `
+            <div class="workspace-row">
+              ${selectable ? `<input type="checkbox" data-workspace-select="${escapeHtml(key)}" aria-label="Include ${escapeHtml(entry.title)}"${checked ? " checked" : ""} />` : "<span></span>"}
+              <span class="agent-badge ${entry.agent}">${agentName}</span>
+              <div class="workspace-session">
+                <strong>${escapeHtml(entry.title)}</strong>
+                <span title="${escapeHtml(entry.folder)}">${escapeHtml(folderLeaf)}</span>
+                ${manuallyAssigned ? '<span class="assignment-badge">assigned</span>' : ""}
+              </div>
+              <div class="workspace-row-side">${statusMarkup}</div>
+            </div>`;
+        }
+
+        function renderWorkspaceDialog() {
+          const remembering = state.workspaceMode === "remember";
+          const restarting = ["restart", "closure"].includes(state.workspaceMode);
+          const closing = state.workspaceMode === "closure";
+          const entries = currentWorkspaceEntries();
+          elements.workspaceTitle.textContent = remembering
+            ? "Remember what's open"
+            : restarting
+              ? closing ? "Review closed sessions" : "Review interrupted sessions"
+              : "Review saved workspace";
+          elements.workspaceDescription.textContent = remembering
+            ? "Open terminal windows are matched to sessions by their visible titles. Unmatched windows are listed separately; you can switch to recently active sessions."
+            : restarting
+              ? closing
+                ? "Choose which pending sessions to relaunch, or copy their folder-prefixed resume commands."
+                : "Choose which sessions to relaunch after the restart, or copy their folder-prefixed resume commands."
+              : "Review the saved sessions and relaunch them individually or together.";
+          elements.workspaceControls.hidden = !remembering;
+          const detectionAvailable = Boolean(state.openWindows?.available);
+          elements.workspaceSourceToggle.hidden = !remembering || !detectionAvailable;
+          elements.workspaceSourceInputs.forEach((input) => {
+            input.checked = input.value === state.workspaceSource;
+          });
+          elements.workspaceWindowControl.hidden = !remembering || state.workspaceSource !== "recent";
+          elements.workspaceWindow.value = String(state.workspaceWindowHours);
+          elements.launchDisabled.textContent = launchUnavailableMessage(state.launchAvailability);
+          elements.launchDisabled.hidden = launchIsAvailable();
+          elements.saveWorkspaceButton.hidden = !remembering && (!restarting || !launchIsAvailable());
+          elements.saveWorkspaceButton.textContent = restarting ? "Relaunch selected" : "Save workspace";
+          elements.saveWorkspaceButton.disabled = restarting && (
+            state.workspaceLaunching || entriesForWorkspaceCopy().length === 0
+          );
+          elements.cancelWorkspaceButton.textContent = remembering ? "Cancel" : "Close";
+          elements.workspaceList.innerHTML = entries.length
+            ? entries.map(workspaceRow).join("")
+            : '<p class="workspace-empty">' + (
+              remembering && !state.openWindows
+                ? "Checking visible windows…"
+                : remembering && state.workspaceSource === "windows"
+                  ? "No open windows could be matched to sessions."
+                  : remembering
+                    ? "No saved sessions are available for this workspace."
+                    : restarting
+                      ? "No interrupted sessions are available."
+                      : "No sessions were saved in this workspace."
+            ) + "</p>";
+          renderWindowDetection(remembering);
+          elements.copyWorkspaceCommandsButton.disabled = entriesForWorkspaceCopy().length === 0;
+        }
+
+        async function fetchOpenWindows() {
+          state.openWindows = null;
+          state.openWindowsServer = null;
+          state.workspaceSource = "windows";
+          state.workspaceSelection = new Set();
+          renderWorkspaceDialog();
+          try {
+            const response = await fetch("/api/windows", { headers: { Accept: "application/json" } });
+            const result = response.ok ? await response.json() : null;
+            state.openWindowsServer = result && typeof result.available === "boolean"
+              ? result
+              : { available: false, matched: [], unidentified: [], ignoredCount: 0, windowCount: 0 };
+          } catch {
+            state.openWindowsServer = { available: false, matched: [], unidentified: [], ignoredCount: 0, windowCount: 0 };
+          }
+          refreshWindowAssignments();
+          if (state.openWindows.available) {
+            state.workspaceSource = "windows";
+            selectOpenWindowEntries();
+          } else {
+            state.workspaceSource = "recent";
+            selectRecentWorkspaceEntries();
+          }
+          if (elements.workspaceDialog.open) renderWorkspaceDialog();
+        }
+
+        function updateWindowAssignment(normalizedTitle, sessionKeyValue) {
+          const candidates = getAssignableSessions(state.sessions, state.openWindows?.matched || []);
+          const session = candidates.find((entry) => workspaceKey(entry) === sessionKeyValue);
+          if (!session) {
+            showToast("Choose an unmatched local session");
+            return;
+          }
+          const previousMap = state.windowMap;
+          const previousAssignment = Object.prototype.hasOwnProperty.call(previousMap, normalizedTitle)
+            ? previousMap[normalizedTitle]
+            : null;
+          state.windowMap = {
+            ...previousMap,
+            [normalizedTitle]: {
+              agent: session.agent,
+              sessionId: session.sessionId,
+              title: displayTitle(session),
+              assignedAt: new Date().toISOString(),
+            },
+          };
+          if (!saveWindowMap()) {
+            state.windowMap = previousMap;
+            return;
+          }
+          if (previousAssignment) state.workspaceSelection.delete(workspaceKey(previousAssignment));
+          refreshWindowAssignments();
+          state.workspaceSelection.add(workspaceKey(session));
+          renderWorkspaceDialog();
+          showToast(previousAssignment ? "Window assignment updated" : "Window assigned to session");
+        }
+
+        function removeWindowAssignment(normalizedTitle, action) {
+          const assignment = Object.prototype.hasOwnProperty.call(state.windowMap, normalizedTitle)
+            ? state.windowMap[normalizedTitle]
+            : null;
+          if (!assignment) return;
+          const previousMap = state.windowMap;
+          const nextMap = { ...previousMap };
+          delete nextMap[normalizedTitle];
+          state.windowMap = nextMap;
+          if (!saveWindowMap()) {
+            state.windowMap = previousMap;
+            return;
+          }
+          refreshWindowAssignments();
+          const assignedKey = workspaceKey(assignment);
+          if (!currentWorkspaceEntries().some((entry) => workspaceKey(entry) === assignedKey)) {
+            state.workspaceSelection.delete(assignedKey);
+          }
+          renderWorkspaceDialog();
+          showToast(action === "forget" ? "Stale assignment forgotten" : "Window assignment cleared");
+        }
+
+        function handleWindowMapAction(button) {
+          const row = button.closest("[data-window-title]");
+          const normalizedTitle = button.dataset.windowTitle || row?.dataset.windowTitle;
+          if (!normalizedTitle) return;
+          const action = button.dataset.windowMapAction;
+          if (["clear", "forget"].includes(action)) {
+            removeWindowAssignment(normalizedTitle, action);
+            return;
+          }
+          const selectedSession = row?.querySelector("[data-window-assignment-picker]")?.value;
+          updateWindowAssignment(normalizedTitle, selectedSession);
+        }
+
+        function openWorkspaceDialog(mode) {
+          state.workspaceMode = mode;
+          if (mode === "closure") state.closureReview = state.closure;
+          state.workspaceStatuses = new Map();
+          state.workspaceWindowHours = mode === "restore" ? state.workspace?.windowHours || 4 : 4;
+          if (mode === "remember") {
+            state.workspaceSource = "windows";
+            state.openWindows = null;
+            state.workspaceSelection = new Set();
+          }
+          if (["restart", "closure"].includes(mode)) {
+            state.workspaceSelection = new Set(currentWorkspaceEntries().map(workspaceKey));
+          }
+          renderWorkspaceDialog();
+          elements.workspaceDialog.showModal();
+          if (mode === "remember") fetchOpenWindows();
+        }
+
+        function closeWorkspaceDialog() {
+          elements.workspaceDialog.close();
+        }
+
+        function saveWorkspace() {
+          const entries = currentWorkspaceEntries()
+            .filter((entry) => state.workspaceSelection.has(workspaceKey(entry)))
+            .map((entry) => ({
+              agent: entry.agent,
+              sessionId: entry.sessionId,
+              title: entry.title,
+              folder: entry.folder,
+              activityAt: entry.activityAt,
+            }));
+          const workspace = {
+            savedAt: new Date().toISOString(),
+            source: state.workspaceSource,
+            windowHours: state.workspaceWindowHours,
+            entries,
+          };
+          try {
+            localStorage.setItem(WORKSPACE_KEY, JSON.stringify(workspace));
+          } catch (error) {
+            console.error(error);
+            showToast("This browser could not save the workspace");
+            return;
+          }
+          state.workspace = workspace;
+          state.workspaceDismissed = false;
+          closeWorkspaceDialog();
+          renderWorkspaceBanner();
+          showToast(`Workspace saved — ${entries.length} session${entries.length === 1 ? "" : "s"}`);
+        }
+
+        function quoteWorkspaceFolder(folder) {
+          if (state.platform === "win32") return quoteShellArg(folder);
+          return `'${String(folder).replaceAll("'", `'\\''`)}'`;
+        }
+
+        function commandWithFolder(entry) {
+          const separator = state.platform === "win32" ? ";" : "&&";
+          return `cd ${quoteWorkspaceFolder(entry.folder)} ${separator} ${resumeCommand(entry)}`;
+        }
+
+        function entriesForWorkspaceCopy() {
+          const entries = currentWorkspaceEntries();
+          return state.workspaceMode === "restore"
+            ? entries
+            : entries.filter((entry) => state.workspaceSelection.has(workspaceKey(entry)));
+        }
+
+        async function launchWorkspaceEntry(entry) {
+          const key = workspaceKey(entry);
+          state.workspaceStatuses.set(key, { state: "pending", detail: "" });
+          renderWorkspaceDialog();
+          try {
+            const response = await fetch("/api/launch", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-session-index-token": state.launchToken,
+              },
+              body: JSON.stringify({ agent: entry.agent, sessionId: entry.sessionId }),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.ok) throw new Error(result.reason || result.error || `Launch failed (${response.status})`);
+            state.workspaceStatuses.set(key, { state: "launched", detail: result.launcher || "terminal" });
+            renderWorkspaceDialog();
+            return true;
+          } catch (error) {
+            state.workspaceStatuses.set(key, { state: "failed", detail: error.message || "Launch failed." });
+            renderWorkspaceDialog();
+            return false;
+          }
+        }
+
+        function wait(milliseconds) {
+          return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+        }
+
+        async function relaunchWorkspace(mode = "restore") {
+          const source = mode === "restart" ? state.restart : mode === "closure" ? state.closureReview || state.closure : state.workspace;
+          if (!source || !launchIsAvailable() || state.workspaceLaunching) return;
+          if (!elements.workspaceDialog.open || state.workspaceMode !== mode) openWorkspaceDialog(mode);
+          const entries = mode === "restore" ? state.workspace.entries : entriesForWorkspaceCopy();
+          if (!entries.length) {
+            showToast("Select at least one session first");
+            return;
+          }
+          state.workspaceLaunching = true;
+          state.workspaceStatuses = new Map(entries.map((entry) => [workspaceKey(entry), { state: "pending", detail: "" }]));
+          renderWorkspaceDialog();
+          renderRestartBanner();
+          renderWorkspaceBanner();
+          let launched = 0;
+          for (let index = 0; index < entries.length; index += 1) {
+            if (index > 0) await wait(600);
+            if (await launchWorkspaceEntry(entries[index])) launched += 1;
+          }
+          state.workspaceLaunching = false;
+          renderRestartBanner();
+          renderWorkspaceBanner();
+          const failed = entries.length - launched;
+          showToast(failed
+            ? `Relaunched ${launched} of ${entries.length} — ${failed} needs its command copied`
+            : `Relaunched ${launched} of ${entries.length}`);
         }
 
         function filteredSessions() {
@@ -2324,6 +3639,61 @@
           row.querySelector("details")?.removeAttribute("open");
         }
 
+        async function fetchClosureOverview() {
+          try {
+            const response = await fetch("/api/closures", { headers: { Accept: "application/json" } });
+            if (!response.ok) return;
+            const payload = await response.json();
+            state.closures = (Array.isArray(payload?.closures) ? payload.closures : [])
+              .filter((closure) => typeof closure?.closedAt === "string" &&
+                Number.isFinite(Date.parse(closure.closedAt)) && closure.pendingCount > 0 &&
+                Array.isArray(closure.sessions) && closure.sessions.every((entry) => (
+                  isValidWorkspaceEntry(entry) && ["pending", "resumed"].includes(entry.status)
+                )))
+              .sort((left, right) => Date.parse(right.closedAt) - Date.parse(left.closedAt));
+            if (state.closureReview) {
+              state.closureReview = state.closures.find((closure) => closure.closedAt === state.closureReview.closedAt) || null;
+              if (elements.workspaceDialog.open && state.workspaceMode === "closure") renderWorkspaceDialog();
+            }
+          } catch {
+            // Closure detection is optional and must never prevent a session refresh.
+          } finally {
+            renderClosureBanner();
+          }
+        }
+
+        async function fetchRestartOverview() {
+          if (state.restartChecked) return;
+          state.restartChecked = true;
+          try {
+            const response = await fetch("/api/restart", {
+              headers: { Accept: "application/json" },
+            });
+            if (!response.ok) return;
+            const payload = await response.json();
+            const sessions = (Array.isArray(payload?.sessions) ? payload.sessions : [])
+              .filter(isValidWorkspaceEntry);
+            if (
+              !["high", "low"].includes(payload?.confidence) ||
+              typeof payload?.interruptedAt !== "string" ||
+              Number.isNaN(new Date(payload.interruptedAt).getTime()) ||
+              sessions.length === 0
+            ) return;
+            state.restart = {
+              interruptedAt: payload.interruptedAt,
+              confidence: payload.confidence,
+              shutdown: payload.shutdown && typeof payload.shutdown === "object"
+                ? payload.shutdown
+                : { available: false, reason: "" },
+              sessions,
+            };
+          } catch {
+            state.restart = null;
+          } finally {
+            renderRestartBanner();
+          }
+        }
+
         async function syncSessions({ notify = true } = {}) {
           if (state.scanning) return;
           state.scanning = true;
@@ -2390,11 +3760,17 @@
             if (changed) {
               saveSessions();
               render();
+              if (state.openWindowsServer) {
+                refreshWindowAssignments();
+                if (elements.workspaceDialog.open) renderWorkspaceDialog();
+              }
             }
 
             if (notify) {
               showToast(added ? `${added} new session${added === 1 ? "" : "s"} added` : "Session list is up to date");
             }
+            void fetchRestartOverview();
+            void fetchClosureOverview();
           } catch (error) {
             console.error(error);
             if (notify) showToast("Scanning needs the local server: node serve.mjs");
@@ -2668,6 +4044,128 @@
           syncSessions({ notify: true });
           fetchUsage({ notify: false });
         });
+        elements.rememberWorkspaceButton.addEventListener("click", () => openWorkspaceDialog("remember"));
+        document.querySelector("#reviewWorkspaceButton").addEventListener("click", () => openWorkspaceDialog("restore"));
+        elements.relaunchWorkspaceButton.addEventListener("click", () => relaunchWorkspace("restore"));
+        elements.reviewRestartButton.addEventListener("click", () => openWorkspaceDialog("restart"));
+        elements.reviewClosureButton.addEventListener("click", () => openWorkspaceDialog("closure"));
+        elements.relaunchClosureButton.addEventListener("click", () => relaunchWorkspace("closure"));
+        elements.copyClosureCommandsButton.addEventListener("click", () => {
+          const entries = (state.closure?.sessions || []).filter((entry) => entry.status === "pending");
+          if (!entries.length) return;
+          copyText(entries.map(commandWithFolder).join("\n"), `${entries.length} resume command${entries.length === 1 ? "" : "s"} copied`);
+        });
+        elements.dismissClosureButton.addEventListener("click", () => {
+          if (!state.closure) return;
+          state.dismissedClosures = [...state.dismissedClosures, state.closure.closedAt].slice(-20);
+          try {
+            localStorage.setItem(CLOSURES_KEY, JSON.stringify(state.dismissedClosures));
+          } catch (error) {
+            console.warn("Could not save dismissed closures", error);
+          }
+          renderClosureBanner();
+        });
+        elements.relaunchRestartButton.addEventListener("click", () => relaunchWorkspace("restart"));
+        elements.copyRestartCommandsButton.addEventListener("click", () => {
+          const entries = state.restart?.sessions || [];
+          if (!entries.length) return;
+          copyText(entries.map(commandWithFolder).join("\n"), `${entries.length} resume command${entries.length === 1 ? "" : "s"} copied`);
+        });
+        elements.dismissRestartButton.addEventListener("click", () => {
+          if (!state.restart?.interruptedAt) return;
+          state.restartDismissedAt = state.restart.interruptedAt;
+          try {
+            localStorage.setItem(RESTART_KEY, JSON.stringify({ interruptedAt: state.restartDismissedAt }));
+          } catch (error) {
+            console.warn("Could not save the dismissed restart", error);
+          }
+          renderRestartBanner();
+        });
+        document.querySelector("#dismissWorkspaceButton").addEventListener("click", () => {
+          state.workspaceDismissed = true;
+          renderWorkspaceBanner();
+        });
+        document.querySelector("#discardWorkspaceButton").addEventListener("click", () => {
+          requestConfirmation({
+            title: "Discard saved workspace?",
+            message: "This removes the remembered workspace from this browser. Your saved session list stays intact.",
+            buttonText: "Discard workspace",
+            action: () => {
+              try {
+                localStorage.removeItem(WORKSPACE_KEY);
+              } catch (error) {
+                console.warn("Could not remove saved workspace", error);
+              }
+              state.workspace = null;
+              state.workspaceDismissed = false;
+              renderWorkspaceBanner();
+              showToast("Saved workspace discarded");
+            },
+          });
+        });
+        elements.workspaceSourceToggle.addEventListener("change", (event) => {
+          const input = event.target.closest('input[name="workspaceSource"]');
+          if (!input || !["windows", "recent"].includes(input.value)) return;
+          state.workspaceSource = input.value;
+          if (state.workspaceSource === "windows") selectOpenWindowEntries();
+          else selectRecentWorkspaceEntries();
+          renderWorkspaceDialog();
+        });
+        elements.workspaceWindow.addEventListener("change", (event) => {
+          state.workspaceWindowHours = Number(event.target.value) || 4;
+          selectRecentWorkspaceEntries();
+          renderWorkspaceDialog();
+        });
+        elements.workspaceList.addEventListener("change", (event) => {
+          const checkbox = event.target.closest("[data-workspace-select]");
+          if (!checkbox) return;
+          if (checkbox.checked) state.workspaceSelection.add(checkbox.dataset.workspaceSelect);
+          else state.workspaceSelection.delete(checkbox.dataset.workspaceSelect);
+          renderWorkspaceDialog();
+        });
+        elements.workspaceList.addEventListener("click", async (event) => {
+          const assignmentButton = event.target.closest("[data-window-map-action]");
+          if (assignmentButton) {
+            handleWindowMapAction(assignmentButton);
+            return;
+          }
+          const button = event.target.closest("[data-workspace-action]");
+          if (!button) return;
+          const entry = currentWorkspaceEntries().find((item) => item.agent === button.dataset.agent && item.sessionId === button.dataset.sessionId);
+          if (!entry) return;
+          if (button.dataset.workspaceAction === "launch") await launchWorkspaceEntry(entry);
+          if (button.dataset.workspaceAction === "copy") await copyText(commandWithFolder(entry), "Resume command copied");
+        });
+        elements.windowTitleList.addEventListener("change", (event) => {
+          const picker = event.target.closest("[data-window-assignment-picker]");
+          if (!picker) return;
+          const button = picker.closest("[data-window-title]")?.querySelector('[data-window-map-action="assign"], [data-window-map-action="reassign"]');
+          if (button) button.disabled = !picker.value;
+        });
+        elements.windowTitleList.addEventListener("click", (event) => {
+          const button = event.target.closest("[data-window-map-action]");
+          if (button) handleWindowMapAction(button);
+        });
+        elements.copyWorkspaceCommandsButton.addEventListener("click", () => {
+          const entries = entriesForWorkspaceCopy();
+          if (!entries.length) {
+            showToast("Select at least one session first");
+            return;
+          }
+          copyText(entries.map(commandWithFolder).join("\n"), `${entries.length} resume command${entries.length === 1 ? "" : "s"} copied`);
+        });
+        elements.saveWorkspaceButton.addEventListener("click", () => {
+          if (["restart", "closure"].includes(state.workspaceMode)) {
+            void relaunchWorkspace(state.workspaceMode);
+            return;
+          }
+          saveWorkspace();
+        });
+        document.querySelector("#closeWorkspaceButton").addEventListener("click", closeWorkspaceDialog);
+        elements.cancelWorkspaceButton.addEventListener("click", closeWorkspaceDialog);
+        elements.workspaceDialog.addEventListener("click", (event) => {
+          if (event.target === elements.workspaceDialog) closeWorkspaceDialog();
+        });
         document.querySelectorAll("#privacyButton, #privacyLearnButton").forEach((button) => {
           button.addEventListener("click", () => {
             updatePrivacyUi();
@@ -2746,6 +4244,8 @@
         elements.importInput.addEventListener("change", (event) => importSessions(event.target.files[0]));
         render();
         renderMission();
+        renderRestartBanner();
+        renderWorkspaceBanner();
         updatePrivacyUi();
         loadServerConfig().then(() => {
           if (state.autoScan) {
