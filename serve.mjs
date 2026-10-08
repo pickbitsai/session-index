@@ -14,7 +14,8 @@ import {
   resolve,
 } from "node:path";
 import { countPosixAgentProcesses, countWindowsAgentProcesses } from "./processes.mjs";
-import { buildLiveSnapshot, mergeRestartDetection, parseLiveSnapshot, sessionIdsFromLockNames, snapshotIsPreBoot } from "./liveness.mjs";
+import { buildLiveSnapshot, carryForwardWindowSessions, mergeRestartDetection, parseLiveSnapshot, sessionIdsFromLockNames, snapshotIsPreBoot } from "./liveness.mjs";
+import { closureStatus, detectClosedTogether, detectLiveSetDrop, mergeClosures, parseClosures } from "./closures.mjs";
 import { detectRestartCasualties, parseShutdownProbeOutput } from "./restart.mjs";
 import { createUsageScanner } from "./usage.mjs";
 import { matchWindowsToSessions, parseVisibleWindowsProbeOutput } from "./windows.mjs";
@@ -48,6 +49,7 @@ const stateDir = resolve(process.env.SESSION_STATE_DIR || (process.platform === 
   : join(os.homedir(), ".local", "state", "session-index")));
 const liveSnapshotPath = join(stateDir, "live-sessions.json");
 const previousBootSnapshotPath = join(stateDir, "live-sessions.prev-boot.json");
+const closuresPath = join(stateDir, "closures.json");
 const livenessEnabled = String(process.env.SESSION_LIVENESS || "on").toLowerCase() !== "off";
 const configuredLivenessInterval = Number(process.env.SESSION_LIVENESS_INTERVAL_MS || 60_000);
 const livenessIntervalMs = Number.isFinite(configuredLivenessInterval)
@@ -285,6 +287,12 @@ async function parseCodexSession(candidate) {
     updatedAt: dateOnly(activityDate),
     activityAt: activityDate.toISOString(),
     metadata: {
+      // Spawned threads (e.g. guardian reviews) share the parent's TUI originator but are not user sessions.
+      interactive: metadata.originator === "codex_exec" || metadata.source === "exec" ||
+        metadata.parent_thread_id || metadata.source?.subagent
+        ? false
+        : typeof metadata.originator === "string" && metadata.originator.trim() ? true : null,
+      exited: null,
       model: latestTurnContext?.model,
       effort: latestTurnContext?.effort,
       turns: candidate.fileStat.size <= prefixBytes
@@ -300,6 +308,7 @@ async function parseCodexSession(candidate) {
 async function parseClaudeSession(candidate) {
   const prefixBytes = 420_000;
   const records = await readJsonlPrefix(candidate.filePath, prefixBytes);
+  const entrypoint = records.find((record) => typeof record.entrypoint === "string")?.entrypoint;
   const firstUser = records.find((record) => record.type === "user" && record.cwd);
   const cwd = firstUser?.cwd;
   if (!isInsideScanRoot(cwd)) return null;
@@ -314,6 +323,7 @@ async function parseClaudeSession(candidate) {
     ? await readJsonlTail(candidate.filePath, candidate.fileStat.size, 640_000)
     : [];
   const recentRecords = [...records, ...tailRecords];
+  const exited = [...recentRecords].reverse().find((record) => record.type !== "queue-operation")?.type === "cost-state";
   const activityDate = sessionActivityDate(recentRecords, candidate.fileStat.mtime);
   const aiTitle = [...recentRecords].reverse().find((record) => record.type === "ai-title")?.aiTitle;
   const lastPrompt = [...recentRecords].reverse().find((record) => record.type === "last-prompt")?.lastPrompt;
@@ -359,6 +369,8 @@ async function parseClaudeSession(candidate) {
     updatedAt: dateOnly(activityDate),
     activityAt: activityDate.toISOString(),
     metadata: {
+      interactive: entrypoint?.startsWith("sdk") ? false : entrypoint === "cli" ? true : null,
+      exited,
       model: latestAssistant?.message?.model,
       effort: latestAssistant?.effort,
       branch: latestRecordedCwd?.gitBranch,
@@ -418,18 +430,27 @@ function runProbe(command, args, timeoutMs = 1_500) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       shell: false,
-      stdio: ["ignore", "pipe", "ignore"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
     let output = "";
+    let stderr = Buffer.alloc(0);
     let timedOut = false;
+    let tooLarge = false;
     const timeout = setTimeout(() => {
       timedOut = true;
       child.kill();
     }, timeoutMs);
 
     child.stdout.on("data", (chunk) => {
+      if (tooLarge) return;
       output += chunk;
-      if (output.length > 1_000_000) child.kill();
+      if (output.length > 1_000_000) {
+        tooLarge = true;
+        child.kill();
+      }
+    });
+    child.stderr.on("data", (chunk) => {
+      if (stderr.length < 4_096) stderr = Buffer.concat([stderr, chunk.subarray(0, 4_096 - stderr.length)]);
     });
     child.on("error", (error) => {
       clearTimeout(timeout);
@@ -437,8 +458,10 @@ function runProbe(command, args, timeoutMs = 1_500) {
     });
     child.on("close", (code) => {
       clearTimeout(timeout);
-      if (timedOut || code !== 0 || output.length > 1_000_000) {
-        reject(new Error("Process check failed."));
+      if (timedOut || code !== 0 || tooLarge) {
+        const firstLine = stderr.toString("utf8").trim().split(/\r?\n/u)[0].trim().slice(0, 200);
+        reject(new Error(timedOut ? `timeout after ${timeoutMs} ms`
+          : tooLarge ? "output too large" : `exit code ${code}: ${firstLine || "no stderr output"}`));
         return;
       }
       resolve(output);
@@ -463,10 +486,11 @@ async function probeRunningAgents() {
       const { claude, codex } = countPosixAgentProcesses(output.split(/\r?\n/), serverPath);
       return { available: true, claude, codex, checkedAt };
     }
-  } catch {
+  } catch (error) {
     // Process enumeration is a sanity check, not a prerequisite for the app.
+    return { available: false, claude: null, codex: null, reason: error.message.slice(0, 240), checkedAt };
   }
-  return { available: false, claude: null, codex: null, checkedAt };
+  return { available: false, claude: null, codex: null, reason: "unsupported platform", checkedAt };
 }
 
 let runningAgentsCache = null;
@@ -561,19 +585,21 @@ const visibleWindowsScript = [
 async function probeVisibleWindows() {
   const checkedAt = new Date().toISOString();
   if (process.platform !== "win32") {
-    return { available: false, windows: [], checkedAt };
+    return { available: false, windows: [], reason: "unsupported platform", checkedAt };
   }
 
   try {
     const output = await runProbe(
       "powershell.exe",
       ["-NoProfile", "-NonInteractive", "-Command", visibleWindowsScript],
-      8_000,
+      15_000,
     );
-    return { ...parseVisibleWindowsProbeOutput(output), checkedAt };
-  } catch {
+    const result = parseVisibleWindowsProbeOutput(output);
+    return result.available ? { ...result, checkedAt }
+      : { ...result, reason: "invalid probe output", checkedAt };
+  } catch (error) {
     // Open-window detection is optional and must never prevent the app from loading.
-    return { available: false, windows: [], checkedAt };
+    return { available: false, windows: [], reason: error.message.slice(0, 240), checkedAt };
   }
 }
 
@@ -654,14 +680,20 @@ function getLastShutdown() {
 
 const livenessErrors = new Set();
 let livenessInitialization = Promise.resolve(true);
-let livenessTickInFlight = false;
+let livenessTickInFlight = null;
 let lastLiveSessionsJson = null;
 let lastLiveSnapshotWrittenAt = 0;
+let previousLiveSnapshot = null;
+let lastAvailableWindowProbeAt = null;
+let storedClosures = [];
+let lastClosuresJson = JSON.stringify({ version: 1, closures: [] });
+let closureInitialization = null;
 
 function logLivenessError(error) {
   const message = error instanceof Error ? error.message : String(error);
-  if (livenessErrors.has(message)) return;
-  livenessErrors.add(message);
+  const key = message.replace(/\d+/gu, "");
+  if (livenessErrors.has(key)) return;
+  livenessErrors.add(key);
   console.warn(`Session liveness: ${message}`);
 }
 
@@ -702,15 +734,49 @@ function enrichWindowMatches(matched, sessions) {
   });
 }
 
-async function writeLivenessHeartbeat() {
-  if (livenessTickInFlight) return;
-  livenessTickInFlight = true;
+async function initializeClosures() {
   try {
+    const saved = parseClosures(await readFile(closuresPath, "utf8"));
+    if (saved) {
+      storedClosures = saved.closures;
+      lastClosuresJson = JSON.stringify({ version: 1, closures: storedClosures });
+    }
+  } catch (error) {
+    if (error.code !== "ENOENT") logLivenessError(error);
+  }
+  try {
+    previousLiveSnapshot = await readLiveSnapshot(liveSnapshotPath);
+    const bootTimeMs = Date.now() - os.uptime() * 1_000;
+    if (previousLiveSnapshot && Math.abs(Date.parse(previousLiveSnapshot.bootAt) - bootTimeMs) <= 5_000) {
+      lastLiveSessionsJson = JSON.stringify({
+        sessions: previousLiveSnapshot.sessions, windowProbe: previousLiveSnapshot.windowProbe,
+      });
+      lastLiveSnapshotWrittenAt = Date.parse(previousLiveSnapshot.savedAt);
+    }
+    if (previousLiveSnapshot && previousLiveSnapshot.windowProbe !== "unavailable") {
+      lastAvailableWindowProbeAt = Date.parse(previousLiveSnapshot.savedAt);
+    }
+  } catch (error) {
+    logLivenessError(error);
+  }
+}
+
+function writeLivenessHeartbeat() {
+  livenessTickInFlight ||= updateLivenessAndClosures()
+    .finally(() => { livenessTickInFlight = null; });
+  return livenessTickInFlight;
+}
+
+async function updateLivenessAndClosures() {
+  try {
+    const preserved = await livenessInitialization;
+    closureInitialization ||= initializeClosures();
+    await closureInitialization;
     const [windows, sessions, processCounts] = await Promise.all([
       getVisibleWindows(), getCachedLookupSessions(), getRunningAgents(),
     ]);
-    if (!windows.available && process.platform === "win32") logLivenessError("Window probe unavailable.");
-    if (!processCounts.available) logLivenessError("Running-agent probe unavailable.");
+    if (!windows.available && process.platform === "win32") logLivenessError(`Window probe unavailable: ${windows.reason}`);
+    if (!processCounts.available) logLivenessError(`Running-agent probe unavailable: ${processCounts.reason}`);
     const matching = matchWindowsToSessions(windows.available ? windows.windows : [], sessions);
     const lockNames = await readdir(codexLockDir).catch((error) => {
       logLivenessError(error);
@@ -729,30 +795,74 @@ async function writeLivenessHeartbeat() {
         continue;
       }
       const { agent, sessionId, title, folder, activityAt } = session;
-      matched.set(`${agent}:${sessionId}`, { agent, sessionId, title, folder, activityAt });
+      matched.set(`${agent}:${sessionId}`, { agent, sessionId, title, folder, activityAt, source: "lock" });
     }
-    // Once written, an empty session list must be able to clear earlier live evidence.
-    if (!matched.size && lastLiveSessionsJson === null) return;
     const now = Date.now();
-    const snapshot = buildLiveSnapshot({
+    const bootTimeMs = now - os.uptime() * 1_000;
+    if (windows.available) lastAvailableWindowProbeAt = now;
+    let snapshot = buildLiveSnapshot({
       matched: [...matched.values()],
       unidentifiedCount: matching.unidentified.length,
       lockCount: lockIds.length,
       processCounts,
       now,
-      bootAt: new Date(now - os.uptime() * 1_000).toISOString(),
+      bootAt: new Date(bootTimeMs).toISOString(),
+      windowProbe: process.platform !== "win32" || windows.available ? "ok" : "unavailable",
     });
-    const sessionsJson = JSON.stringify(snapshot.sessions);
-    if (sessionsJson === lastLiveSessionsJson && now - lastLiveSnapshotWrittenAt < 300_000) return;
-    await mkdir(stateDir, { recursive: true });
-    await writeFile(`${liveSnapshotPath}.tmp`, JSON.stringify(snapshot), "utf8");
-    await rename(`${liveSnapshotPath}.tmp`, liveSnapshotPath);
-    lastLiveSessionsJson = sessionsJson;
-    lastLiveSnapshotWrittenAt = now;
+    if (process.platform === "win32") snapshot = carryForwardWindowSessions(previousLiveSnapshot, snapshot, {
+      nowMs: now, lastAvailableAtMs: lastAvailableWindowProbeAt,
+    });
+    const liveKeys = new Set(snapshot.sessions.map((session) => `${session.agent}:${session.sessionId}`));
+    const detected = detectClosedTogether(sessions, { nowMs: now, bootTimeMs, liveKeys });
+    const drop = detectLiveSetDrop(previousLiveSnapshot, snapshot, { sessions });
+    if (drop) detected.push(drop);
+    previousLiveSnapshot = snapshot;
+    storedClosures = mergeClosures(storedClosures, detected, { nowMs: now });
+    const closuresJson = JSON.stringify({ version: 1, closures: storedClosures });
+    const canWrite = livenessEnabled && preserved;
+    if (canWrite && closuresJson !== lastClosuresJson) {
+      try {
+        await mkdir(stateDir, { recursive: true });
+        await writeFile(`${closuresPath}.tmp`, closuresJson, "utf8");
+        await rename(`${closuresPath}.tmp`, closuresPath);
+        lastClosuresJson = closuresJson;
+      } catch (error) {
+        logLivenessError(error);
+      }
+    }
+    const sessionsJson = JSON.stringify({ sessions: snapshot.sessions, windowProbe: snapshot.windowProbe });
+    // Detection runs on every tick, even when the live file does not need a write.
+    if (canWrite && (snapshot.sessions.length || lastLiveSessionsJson !== null) &&
+      (sessionsJson !== lastLiveSessionsJson || now - lastLiveSnapshotWrittenAt >= 300_000)) {
+      try {
+        await mkdir(stateDir, { recursive: true });
+        await writeFile(`${liveSnapshotPath}.tmp`, JSON.stringify(snapshot), "utf8");
+        await rename(`${liveSnapshotPath}.tmp`, liveSnapshotPath);
+        lastLiveSessionsJson = sessionsJson;
+        lastLiveSnapshotWrittenAt = now;
+      } catch (error) {
+        logLivenessError(error);
+      }
+    }
+    return { sessions, liveKeys, checkedAt: new Date(now).toISOString() };
   } catch (error) {
     logLivenessError(error);
-  } finally {
-    livenessTickInFlight = false;
+    return null;
+  }
+}
+
+async function getClosureOverview() {
+  try {
+    const latest = await writeLivenessHeartbeat();
+    if (!latest) return { closures: [], checkedAt: new Date().toISOString() };
+    return {
+      closures: storedClosures.map((closure) => closureStatus(closure, latest.sessions, latest.liveKeys))
+        .filter((closure) => closure.pendingCount > 0),
+      checkedAt: latest.checkedAt,
+    };
+  } catch (error) {
+    logLivenessError(error);
+    return { closures: [], checkedAt: new Date().toISOString() };
   }
 }
 
@@ -824,6 +934,7 @@ async function getWindowSessionOverview() {
       unidentified: [],
       ignoredCount: 0,
       windowCount,
+      reason: result.reason,
       checkedAt: result.checkedAt,
     };
   }
@@ -1046,6 +1157,11 @@ createServer(async (request, response) => {
 
   if (request.method === "GET" && url.pathname === "/api/restart") {
     sendJson(response, 200, await getRestartSessionOverview());
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/closures") {
+    sendJson(response, 200, await getClosureOverview());
     return;
   }
 

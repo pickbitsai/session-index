@@ -20,13 +20,14 @@ export function sessionIdsFromLockNames(names) {
   return [...ids];
 }
 
-export function buildLiveSnapshot({ matched, unidentifiedCount, lockCount = 0, processCounts, now, bootAt }) {
+export function buildLiveSnapshot({ matched, unidentifiedCount, lockCount = 0, processCounts, now, bootAt, windowProbe = "ok" }) {
   return {
     version: 1,
     savedAt: new Date(now).toISOString(),
     bootAt,
-    sessions: matched.map(({ agent, sessionId, title, folder, activityAt }) => ({
-      agent, sessionId, title, folder, activityAt,
+    windowProbe,
+    sessions: matched.map(({ agent, sessionId, title, folder, activityAt, source = "window" }) => ({
+      agent, sessionId, title, folder, activityAt, source,
     })),
     unidentifiedCount,
     lockCount,
@@ -42,12 +43,14 @@ export function parseLiveSnapshot(text) {
       !snapshot || snapshot.version !== 1 ||
       !Number.isFinite(timestamp(snapshot.savedAt)) ||
       !Number.isFinite(timestamp(snapshot.bootAt)) ||
+      (Object.hasOwn(snapshot, "windowProbe") && !["ok", "unavailable"].includes(snapshot.windowProbe)) ||
       !Array.isArray(snapshot.sessions) ||
       !snapshot.sessions.every((session) => (
         session && ["claude", "codex"].includes(session.agent) &&
         typeof session.sessionId === "string" && session.sessionId.length > 0 &&
         typeof session.title === "string" && typeof session.folder === "string" &&
-        Number.isFinite(timestamp(session.activityAt))
+        Number.isFinite(timestamp(session.activityAt)) &&
+        (!Object.hasOwn(session, "source") || ["window", "lock"].includes(session.source))
       )) ||
       !isCount(snapshot.unidentifiedCount) ||
       (Object.hasOwn(snapshot, "lockCount") && !isCount(snapshot.lockCount)) || !snapshot.processCounts ||
@@ -58,6 +61,21 @@ export function parseLiveSnapshot(text) {
   } catch {
     return null;
   }
+}
+
+export function carryForwardWindowSessions(previous, current, { nowMs, lastAvailableAtMs, maxAgeMs = 600_000 }) {
+  if (current.windowProbe !== "unavailable" || !previous ||
+    !Number.isFinite(lastAvailableAtMs) || nowMs < lastAvailableAtMs ||
+    nowMs - lastAvailableAtMs > maxAgeMs ||
+    !Number.isFinite(timestamp(previous.bootAt)) || !Number.isFinite(timestamp(current.bootAt)) ||
+    Math.abs(timestamp(previous.bootAt) - timestamp(current.bootAt)) > 5_000) return current;
+  const known = new Set(current.sessions.map(sessionKey));
+  return {
+    ...current,
+    sessions: [...current.sessions, ...previous.sessions.filter((session) => (
+      session.source === "window" && !known.has(sessionKey(session))
+    ))],
+  };
 }
 
 export function snapshotIsPreBoot(snapshot, { bootTimeMs, shutdownTimeMs, maxAgeMs = 600_000 }) {

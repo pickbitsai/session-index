@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   buildLiveSnapshot,
+  carryForwardWindowSessions,
   mergeRestartDetection,
   parseLiveSnapshot,
   sessionIdsFromLockNames,
@@ -64,7 +65,8 @@ test("snapshot stores only selected session fields and counts, never probe detai
     version: 1,
     savedAt: iso(shutdownTimeMs - 60_000),
     bootAt: iso(bootTimeMs - 86_400_000),
-    sessions: [entry],
+    windowProbe: "ok",
+    sessions: [{ ...entry, source: "window" }],
     unidentifiedCount: 2,
     lockCount: 1,
     processCounts: { claude: null, codex: 1 },
@@ -83,6 +85,42 @@ test("parse accepts optional non-negative integer lock counts and older snapshot
   for (const count of [-1, 0.5, null, "1", false, {}, []]) {
     assert.equal(parseLiveSnapshot(JSON.stringify({ ...legacy, lockCount: count })), null);
   }
+});
+
+test("snapshot sources and probe availability are optional in old files and validated when present", () => {
+  const saved = snapshot([{ ...session("locked"), source: "lock" }, session("window")]);
+  assert.deepEqual(saved.sessions.map((entry) => entry.source), ["lock", "window"]);
+  const { windowProbe, ...legacy } = saved;
+  legacy.sessions = legacy.sessions.map(({ source, ...entry }) => entry);
+  assert.deepEqual(parseLiveSnapshot(JSON.stringify(legacy)), legacy);
+  for (const probe of ["ok", "unavailable"]) {
+    assert.ok(parseLiveSnapshot(JSON.stringify({ ...saved, windowProbe: probe })));
+  }
+  for (const probe of [null, "unknown", false, 1]) {
+    assert.equal(parseLiveSnapshot(JSON.stringify({ ...saved, windowProbe: probe })), null);
+  }
+  for (const source of [null, "activity", false, 1]) {
+    assert.equal(parseLiveSnapshot(JSON.stringify({ ...saved, sessions: [{ ...session("bad"), source }] })), null);
+  }
+});
+
+test("unavailable probes carry only window sessions for at most ten minutes without renewing the deadline", () => {
+  const previous = snapshot([session("window"), session("both"), { ...session("old-lock"), source: "lock" }]);
+  const current = { ...snapshot([{ ...session("both"), source: "lock" }, session("new")]), windowProbe: "unavailable" };
+  const lastAvailableAtMs = shutdownTimeMs;
+  const carried = carryForwardWindowSessions(previous, current, { nowMs: lastAvailableAtMs + 60_000, lastAvailableAtMs });
+  assert.deepEqual(carried.sessions.map((entry) => entry.sessionId), ["both", "new", "window"]);
+  assert.equal(carried.sessions[0].source, "lock");
+  assert.equal(carried.windowProbe, "unavailable");
+  assert.equal(current.sessions.length, 2);
+  const repeated = carryForwardWindowSessions(carried, current, { nowMs: lastAvailableAtMs + 600_000, lastAvailableAtMs });
+  assert.equal(repeated.sessions.length, 3);
+  assert.deepEqual(carryForwardWindowSessions(repeated, current, { nowMs: lastAvailableAtMs + 600_001, lastAvailableAtMs }), current);
+  assert.deepEqual(carryForwardWindowSessions(previous, { ...current, windowProbe: "ok" }, { nowMs: lastAvailableAtMs, lastAvailableAtMs }), { ...current, windowProbe: "ok" });
+  assert.deepEqual(carryForwardWindowSessions(previous, current, { nowMs: lastAvailableAtMs, lastAvailableAtMs: null }), current);
+  assert.deepEqual(carryForwardWindowSessions({ ...previous, bootAt: iso(bootTimeMs) }, current, { nowMs: lastAvailableAtMs, lastAvailableAtMs }), current);
+  const legacy = { ...previous, sessions: [session("no-source")] };
+  assert.deepEqual(carryForwardWindowSessions(legacy, current, { nowMs: lastAvailableAtMs, lastAvailableAtMs }), current);
 });
 
 test("parse rejects missing, malformed, and wrong-version snapshots without throwing", () => {

@@ -1991,6 +1991,26 @@
           </div>
         </aside>
 
+        <aside class="workspace-banner restart-banner" id="closureBanner" aria-label="Closed together" hidden>
+          <div class="restart-banner-main">
+            <div class="workspace-banner-copy">
+              <strong class="restart-banner-title">Closed together</strong>
+              <span id="closureBannerCopy"></span>
+            </div>
+            <ul class="restart-session-list" id="closureSessionList"></ul>
+          </div>
+          <div class="workspace-banner-actions">
+            <button class="button primary" id="relaunchClosureButton" type="button">Relaunch</button>
+            <button class="button" id="reviewClosureButton" type="button">Review</button>
+            <button class="button" id="copyClosureCommandsButton" type="button">Copy all commands</button>
+            <button class="icon-button" id="dismissClosureButton" type="button" aria-label="Dismiss closed together banner">
+              <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="m6 6 12 12M18 6 6 18" />
+              </svg>
+            </button>
+          </div>
+        </aside>
+
         <aside class="workspace-banner" id="workspaceBanner" aria-label="Saved workspace" hidden>
           <span class="workspace-banner-copy" id="workspaceBannerCopy"></span>
           <div class="workspace-banner-actions">
@@ -2269,6 +2289,7 @@
         const WORKSPACE_KEY = "session-index.workspace.v1";
         const WINDOW_MAP_KEY = "session-index.window-map.v1";
         const RESTART_KEY = "session-index.restart.v1";
+        const CLOSURES_KEY = "session-index.closures.v1";
         const SCAN_PREF_KEY = "session-index.auto-scan.v1";
         const JULES_KEY = "session-index.jules-tasks.v1";
         const initialSessions = loadSessions();
@@ -2289,6 +2310,10 @@
           restart: null,
           restartChecked: false,
           restartDismissedAt: initialRestartDismissal,
+          closures: [],
+          closure: null,
+          closureReview: null,
+          dismissedClosures: loadClosureDismissals(),
           openWindows: null,
           openWindowsServer: null,
           windowMap: initialWindowMap,
@@ -2329,6 +2354,13 @@
           reviewRestartButton: document.querySelector("#reviewRestartButton"),
           copyRestartCommandsButton: document.querySelector("#copyRestartCommandsButton"),
           dismissRestartButton: document.querySelector("#dismissRestartButton"),
+          closureBanner: document.querySelector("#closureBanner"),
+          closureBannerCopy: document.querySelector("#closureBannerCopy"),
+          closureSessionList: document.querySelector("#closureSessionList"),
+          relaunchClosureButton: document.querySelector("#relaunchClosureButton"),
+          reviewClosureButton: document.querySelector("#reviewClosureButton"),
+          copyClosureCommandsButton: document.querySelector("#copyClosureCommandsButton"),
+          dismissClosureButton: document.querySelector("#dismissClosureButton"),
           workspaceBanner: document.querySelector("#workspaceBanner"),
           workspaceBannerCopy: document.querySelector("#workspaceBannerCopy"),
           relaunchWorkspaceButton: document.querySelector("#relaunchWorkspaceButton"),
@@ -2435,6 +2467,18 @@
           } catch (error) {
             console.warn("Could not load the dismissed restart", error);
             return "";
+          }
+        }
+
+        function loadClosureDismissals() {
+          try {
+            const parsed = JSON.parse(localStorage.getItem(CLOSURES_KEY) || "[]");
+            return Array.isArray(parsed) ? parsed.filter((value) => (
+              typeof value === "string" && Number.isFinite(Date.parse(value))
+            )).slice(-20) : [];
+          } catch (error) {
+            console.warn("Could not load dismissed closures", error);
+            return [];
           }
         }
 
@@ -2774,6 +2818,8 @@
         function currentWorkspaceEntries() {
           if (state.workspaceMode === "restore") return state.workspace?.entries || [];
           if (state.workspaceMode === "restart") return state.restart?.sessions || [];
+          if (state.workspaceMode === "closure") return (state.closureReview?.sessions || [])
+            .filter((entry) => entry.status === "pending");
           if (state.workspaceSource === "windows") {
             return (state.openWindows?.matched || [])
               .filter((entry) => ["claude", "codex"].includes(entry.agent) && entry.sessionId && entry.folder)
@@ -2814,6 +2860,7 @@
             restart.interruptedAt !== state.restartDismissedAt
           );
           elements.restartBanner.hidden = !visible;
+          renderClosureBanner();
           if (!visible) return;
 
           const count = restart.sessions.length;
@@ -2831,19 +2878,54 @@
             rebootCount > 1 ? `${rebootCount} restarts` : "",
           ].filter(Boolean).join("; ");
           elements.restartBannerCopy.textContent = `${count} session${count === 1 ? "" : "s"} ${verb} by a restart on ${formatRestartTime(restart.interruptedAt)}${restartDetails ? ` (${restartDetails})` : ""}.`;
-          elements.restartSessionList.innerHTML = restart.sessions.map((entry) => {
-            const agentName = entry.agent === "codex" ? "Codex" : "Claude";
-            const leaf = entry.folder.split(/[\\/]/).filter(Boolean).pop() || entry.folder;
-            return `<li>
-              <span class="agent-badge ${entry.agent}">${agentName}</span>
-              <strong title="${escapeHtml(entry.title)}">${escapeHtml(entry.title)}</strong>
-              <span class="restart-folder" title="${escapeHtml(entry.folder)}">${escapeHtml(leaf)}${entry.source === "snapshot" ? '<span class="restart-source" title="Seen open in a terminal window shortly before the shutdown">open at shutdown</span>' : ""}</span>
-            </li>`;
-          }).join("");
+          renderRecoverySessionList(elements.restartSessionList, restart.sessions, true);
           elements.relaunchRestartButton.hidden = !launchIsAvailable();
           elements.relaunchRestartButton.disabled = state.workspaceLaunching || count === 0;
           elements.copyRestartCommandsButton.hidden = launchIsAvailable();
           elements.copyRestartCommandsButton.disabled = state.launchAvailability === "loading" || count === 0;
+        }
+
+        function renderRecoverySessionList(list, sessions, restarting = false) {
+          list.replaceChildren(...sessions.map((entry) => {
+            const item = document.createElement("li");
+            const badge = document.createElement("span");
+            badge.className = `agent-badge ${entry.agent}`;
+            badge.textContent = entry.agent === "codex" ? "Codex" : "Claude";
+            const title = document.createElement("strong");
+            title.title = entry.title;
+            title.textContent = entry.title;
+            const folder = document.createElement("span");
+            folder.className = "restart-folder";
+            folder.title = entry.folder;
+            folder.textContent = entry.folder.split(/[\\/]/u).filter(Boolean).pop() || entry.folder;
+            if (restarting && entry.source === "snapshot") {
+              const source = document.createElement("span");
+              source.className = "restart-source";
+              source.title = "Seen open in a terminal window shortly before the shutdown";
+              source.textContent = "open at shutdown";
+              folder.append(source);
+            }
+            item.append(badge, title, folder);
+            return item;
+          }));
+        }
+
+        function renderClosureBanner() {
+          const restartKeys = new Set(elements.restartBanner.hidden ? [] : state.restart.sessions.map(workspaceKey));
+          state.closure = state.closures.find((closure) => {
+            const pending = closure.sessions.filter((entry) => entry.status === "pending");
+            return pending.length && !state.dismissedClosures.includes(closure.closedAt) &&
+              !pending.every((entry) => restartKeys.has(workspaceKey(entry)));
+          }) || null;
+          elements.closureBanner.hidden = !state.closure;
+          if (!state.closure) return;
+          const closure = state.closure;
+          const pending = closure.sessions.filter((entry) => entry.status === "pending");
+          elements.closureBannerCopy.textContent = `${closure.sessions.length} sessions closed on ${formatRestartTime(closure.closedAt)} · ${closure.resumedCount} resumed`;
+          renderRecoverySessionList(elements.closureSessionList, pending);
+          elements.relaunchClosureButton.hidden = !launchIsAvailable();
+          elements.relaunchClosureButton.disabled = state.workspaceLaunching;
+          elements.copyClosureCommandsButton.disabled = state.launchAvailability === "loading";
         }
 
         function renderWorkspaceBanner() {
@@ -2959,7 +3041,7 @@
         function workspaceRow(entry) {
           const key = workspaceKey(entry);
           const remembering = state.workspaceMode === "remember";
-          const selectable = remembering || state.workspaceMode === "restart";
+          const selectable = remembering || ["restart", "closure"].includes(state.workspaceMode);
           const checked = state.workspaceSelection.has(key);
           const agentName = entry.agent === "codex" ? "Codex" : "Claude";
           const folderLeaf = entry.folder.split(/[\\/]/).filter(Boolean).pop() || entry.folder;
@@ -2991,17 +3073,20 @@
 
         function renderWorkspaceDialog() {
           const remembering = state.workspaceMode === "remember";
-          const restarting = state.workspaceMode === "restart";
+          const restarting = ["restart", "closure"].includes(state.workspaceMode);
+          const closing = state.workspaceMode === "closure";
           const entries = currentWorkspaceEntries();
           elements.workspaceTitle.textContent = remembering
             ? "Remember what's open"
             : restarting
-              ? "Review interrupted sessions"
+              ? closing ? "Review closed sessions" : "Review interrupted sessions"
               : "Review saved workspace";
           elements.workspaceDescription.textContent = remembering
             ? "Open terminal windows are matched to sessions by their visible titles. Unmatched windows are listed separately; you can switch to recently active sessions."
             : restarting
-              ? "Choose which sessions to relaunch after the restart, or copy their folder-prefixed resume commands."
+              ? closing
+                ? "Choose which pending sessions to relaunch, or copy their folder-prefixed resume commands."
+                : "Choose which sessions to relaunch after the restart, or copy their folder-prefixed resume commands."
               : "Review the saved sessions and relaunch them individually or together.";
           elements.workspaceControls.hidden = !remembering;
           const detectionAvailable = Boolean(state.openWindows?.available);
@@ -3130,6 +3215,7 @@
 
         function openWorkspaceDialog(mode) {
           state.workspaceMode = mode;
+          if (mode === "closure") state.closureReview = state.closure;
           state.workspaceStatuses = new Map();
           state.workspaceWindowHours = mode === "restore" ? state.workspace?.windowHours || 4 : 4;
           if (mode === "remember") {
@@ -3137,7 +3223,7 @@
             state.openWindows = null;
             state.workspaceSelection = new Set();
           }
-          if (mode === "restart") {
+          if (["restart", "closure"].includes(mode)) {
             state.workspaceSelection = new Set(currentWorkspaceEntries().map(workspaceKey));
           }
           renderWorkspaceDialog();
@@ -3226,10 +3312,10 @@
         }
 
         async function relaunchWorkspace(mode = "restore") {
-          const source = mode === "restart" ? state.restart : state.workspace;
+          const source = mode === "restart" ? state.restart : mode === "closure" ? state.closureReview || state.closure : state.workspace;
           if (!source || !launchIsAvailable() || state.workspaceLaunching) return;
           if (!elements.workspaceDialog.open || state.workspaceMode !== mode) openWorkspaceDialog(mode);
-          const entries = mode === "restart" ? entriesForWorkspaceCopy() : state.workspace.entries;
+          const entries = mode === "restore" ? state.workspace.entries : entriesForWorkspaceCopy();
           if (!entries.length) {
             showToast("Select at least one session first");
             return;
@@ -3553,6 +3639,29 @@
           row.querySelector("details")?.removeAttribute("open");
         }
 
+        async function fetchClosureOverview() {
+          try {
+            const response = await fetch("/api/closures", { headers: { Accept: "application/json" } });
+            if (!response.ok) return;
+            const payload = await response.json();
+            state.closures = (Array.isArray(payload?.closures) ? payload.closures : [])
+              .filter((closure) => typeof closure?.closedAt === "string" &&
+                Number.isFinite(Date.parse(closure.closedAt)) && closure.pendingCount > 0 &&
+                Array.isArray(closure.sessions) && closure.sessions.every((entry) => (
+                  isValidWorkspaceEntry(entry) && ["pending", "resumed"].includes(entry.status)
+                )))
+              .sort((left, right) => Date.parse(right.closedAt) - Date.parse(left.closedAt));
+            if (state.closureReview) {
+              state.closureReview = state.closures.find((closure) => closure.closedAt === state.closureReview.closedAt) || null;
+              if (elements.workspaceDialog.open && state.workspaceMode === "closure") renderWorkspaceDialog();
+            }
+          } catch {
+            // Closure detection is optional and must never prevent a session refresh.
+          } finally {
+            renderClosureBanner();
+          }
+        }
+
         async function fetchRestartOverview() {
           if (state.restartChecked) return;
           state.restartChecked = true;
@@ -3661,6 +3770,7 @@
               showToast(added ? `${added} new session${added === 1 ? "" : "s"} added` : "Session list is up to date");
             }
             void fetchRestartOverview();
+            void fetchClosureOverview();
           } catch (error) {
             console.error(error);
             if (notify) showToast("Scanning needs the local server: node serve.mjs");
@@ -3938,6 +4048,23 @@
         document.querySelector("#reviewWorkspaceButton").addEventListener("click", () => openWorkspaceDialog("restore"));
         elements.relaunchWorkspaceButton.addEventListener("click", () => relaunchWorkspace("restore"));
         elements.reviewRestartButton.addEventListener("click", () => openWorkspaceDialog("restart"));
+        elements.reviewClosureButton.addEventListener("click", () => openWorkspaceDialog("closure"));
+        elements.relaunchClosureButton.addEventListener("click", () => relaunchWorkspace("closure"));
+        elements.copyClosureCommandsButton.addEventListener("click", () => {
+          const entries = (state.closure?.sessions || []).filter((entry) => entry.status === "pending");
+          if (!entries.length) return;
+          copyText(entries.map(commandWithFolder).join("\n"), `${entries.length} resume command${entries.length === 1 ? "" : "s"} copied`);
+        });
+        elements.dismissClosureButton.addEventListener("click", () => {
+          if (!state.closure) return;
+          state.dismissedClosures = [...state.dismissedClosures, state.closure.closedAt].slice(-20);
+          try {
+            localStorage.setItem(CLOSURES_KEY, JSON.stringify(state.dismissedClosures));
+          } catch (error) {
+            console.warn("Could not save dismissed closures", error);
+          }
+          renderClosureBanner();
+        });
         elements.relaunchRestartButton.addEventListener("click", () => relaunchWorkspace("restart"));
         elements.copyRestartCommandsButton.addEventListener("click", () => {
           const entries = state.restart?.sessions || [];
@@ -4028,8 +4155,8 @@
           copyText(entries.map(commandWithFolder).join("\n"), `${entries.length} resume command${entries.length === 1 ? "" : "s"} copied`);
         });
         elements.saveWorkspaceButton.addEventListener("click", () => {
-          if (state.workspaceMode === "restart") {
-            void relaunchWorkspace("restart");
+          if (["restart", "closure"].includes(state.workspaceMode)) {
+            void relaunchWorkspace(state.workspaceMode);
             return;
           }
           saveWorkspace();

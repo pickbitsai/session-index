@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { request } from "node:http";
 import { tmpdir, uptime } from "node:os";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { parseLiveSnapshot } from "../liveness.mjs";
+import { parseClosures } from "../closures.mjs";
 
 const root = process.cwd();
 const port = 43_000 + (process.pid % 1_000);
@@ -93,7 +94,7 @@ before(async () => {
   }
 
   const codexRecords = [
-    { type: "session_meta", payload: { id: "codex-test", cwd: join(scanRoot, "widget"), context_window: 100_000 } },
+    { type: "session_meta", payload: { id: "codex-test", cwd: join(scanRoot, "widget"), context_window: 100_000, originator: "codex_cli_rs" } },
     { type: "response_item", payload: { role: "user", content: [{ type: "input_text", text: "Build the synthetic widget." }] } },
     { type: "turn_context", payload: { model: "gpt-test", effort: "low" } },
     { type: "event_msg", payload: { type: "user_message", message: "Build the synthetic widget." } },
@@ -104,7 +105,7 @@ before(async () => {
   await utimes(codexTestPath, new Date("2025-01-01T00:00:00.000Z"), new Date("2025-01-01T00:00:00.000Z"));
 
   const claudeRecords = [
-    { type: "user", cwd: join(scanRoot, "review"), sessionId: "claude-test", gitBranch: "main", message: { content: "Review the synthetic widget." } },
+    { type: "user", cwd: join(scanRoot, "review"), sessionId: "claude-test", gitBranch: "main", entrypoint: "cli", message: { content: "Review the synthetic widget." } },
     { type: "last-prompt", sessionId: "claude-test", lastPrompt: "Ignore this earlier prompt." },
     { type: "assistant", cwd: join(scanRoot, "review"), gitBranch: "main", effort: "high", message: { model: "claude-test-model", usage: { input_tokens: 10, cache_creation_input_tokens: 20, cache_read_input_tokens: 30 } } },
     { type: "last-prompt", sessionId: "claude-test", lastPrompt: "Check the synthetic result." },
@@ -209,10 +210,14 @@ test("exposes local configuration and parses synthetic provider metadata", async
   assert.equal(codex.metadata.model, "gpt-test");
   assert.equal(codex.metadata.contextTokens, 25_000);
   assert.equal(codex.metadata.contextWindow, 100_000);
+  assert.equal(codex.metadata.interactive, true);
+  assert.equal(codex.metadata.exited, null);
   assert.equal(claude.title, "Synthetic review");
   assert.equal(claude.about, "Check the synthetic result.");
   assert.equal(claude.metadata.model, "claude-test-model");
   assert.equal(claude.metadata.contextTokens, 60);
+  assert.equal(claude.metadata.interactive, true);
+  assert.equal(claude.metadata.exited, false);
 });
 
 test("serves engine utilization with the expected shape", async () => {
@@ -428,6 +433,57 @@ test("content activity and persisted pre-boot evidence survive stale file times"
   await writeFile(codexPath, `${records.map(JSON.stringify).join("\n")}\n`);
   await utimes(codexPath, oldMtime, oldMtime);
 
+  const closureTime = Date.now() - 120_000;
+  const claudeDirectory = join(claudeHome, "projects", scanRoot.replace(/[:\\/]/gu, "-").toLowerCase());
+  for (const [id, entrypoint] of [["closure-cli-one", "cli"], ["closure-cli-two", "cli"],
+    ["closure-sdk", "sdk-cli"], ["closure-sdk-other", "sdk-custom"], ["closure-unknown", undefined]]) {
+    const path = join(claudeDirectory, `${id}.jsonl`);
+    const lines = [
+      { type: "user", cwd: folder, sessionId: id, message: { content: `Fixture ${id}` } },
+      { type: "system", entrypoint, timestamp: new Date(closureTime).toISOString() },
+      { type: "system", entrypoint: "cli", timestamp: new Date(closureTime + 400).toISOString() },
+      { type: "cost-state", timestamp: new Date(closureTime + 400).toISOString() },
+    ];
+    // Missing entrypoints stay unknown; otherwise the first string wins.
+    if (!entrypoint) delete lines[2].entrypoint;
+    await writeFile(path, `${lines.map(JSON.stringify).join("\n")}\n`);
+    await utimes(path, new Date(closureTime), new Date(closureTime));
+  }
+  const exitCases = [
+    ["exit-last", ["cost-state"], true],
+    ["exit-queued", ["cost-state", "queue-operation", "queue-operation"], true],
+    ["exit-snapshot", ["cost-state", "file-history-snapshot"], false],
+    ["exit-user", ["cost-state", "user"], false],
+    ["exit-none", ["assistant"], false],
+    ["exit-last-prompt", ["cost-state", "last-prompt"], false],
+    ["exit-final-cost", ["cost-state", "last-prompt", "cost-state"], true],
+    ["exit-attachment", ["cost-state", "attachment"], false],
+    ["exit-bridge", ["cost-state", "bridge-session"], false],
+    ["exit-resumed-queued", ["cost-state", "file-history-snapshot", "queue-operation"], false],
+    ["exit-no-cost-queued", ["queue-operation"], false],
+    ["exit-tail", ["padding", "cost-state", "last-prompt", "cost-state", "queue-operation"], true],
+    ["exit-tail-resumed", ["cost-state", "padding", "file-history-snapshot"], false],
+  ];
+  for (const [id, types] of exitCases) {
+    const path = join(claudeDirectory, `${id}.jsonl`);
+    const lines = [
+      { type: "user", entrypoint: "cli", cwd: folder, sessionId: id, message: { content: `Fixture ${id}` } },
+      ...types.map((type) => ({ type, timestamp: oldMtime.toISOString(),
+        ...(type === "padding" ? { payload: "x".repeat(1_100_000) } : {}) })),
+    ];
+    await writeFile(path, `${lines.map(JSON.stringify).join("\n")}\n`);
+    await utimes(path, oldMtime, oldMtime);
+  }
+  for (const [id, originator, source, extra = {}] of [["closure-codex-exec", "codex_exec", undefined],
+    ["closure-codex-source-exec", "codex_cli_rs", "exec"], ["closure-codex-unknown", undefined, undefined],
+    ["closure-codex-subagent", "codex-tui", { subagent: { other: "guardian" } }],
+    ["closure-codex-child", "codex-tui", "vscode", { parent_thread_id: "closure-codex-parent" }]]) {
+    const path = join(codexHome, "sessions", `${id}.jsonl`);
+    await writeFile(path, `${JSON.stringify({ type: "session_meta", timestamp: new Date(closureTime).toISOString(),
+      payload: { id, cwd: folder, originator, source, ...extra } })}\n`);
+    await utimes(path, new Date(closureTime), new Date(closureTime));
+  }
+
   const snapshot = {
     version: 1,
     savedAt,
@@ -449,23 +505,30 @@ test("content activity and persisted pre-boot evidence survive stale file times"
       snapshotServer.kill();
     });
   }
-  async function startSnapshotServer() {
+  async function startSnapshotServer({ liveness = "off", unavailableProbes = false } = {}) {
     let output = "";
+    const env = {
+      ...process.env,
+      PORT: String(snapshotPort),
+      SESSION_SCAN_ROOT: scanRoot,
+      SESSION_SCAN_LIMIT: "250",
+      SESSION_LOOKUP_LIMIT: "250",
+      SESSION_LAUNCH: "off",
+      SESSION_STATE_DIR: snapshotStateDir,
+      SESSION_LIVENESS: liveness,
+      SESSION_LIVENESS_INTERVAL_MS: "1",
+      CODEX_HOME: codexHome,
+      CLAUDE_CONFIG_DIR: claudeHome,
+    };
+    if (unavailableProbes) {
+      for (const key of Object.keys(env)) {
+        if (key.toLowerCase() === "path") delete env[key];
+      }
+      env.PATH = snapshotStateDir;
+    }
     snapshotServer = spawn(process.execPath, ["serve.mjs"], {
       cwd: root,
-      env: {
-        ...process.env,
-        PORT: String(snapshotPort),
-        SESSION_SCAN_ROOT: scanRoot,
-        SESSION_SCAN_LIMIT: "250",
-        SESSION_LOOKUP_LIMIT: "250",
-        SESSION_LAUNCH: "off",
-        SESSION_STATE_DIR: snapshotStateDir,
-        SESSION_LIVENESS: "off",
-        SESSION_LIVENESS_INTERVAL_MS: "1",
-        CODEX_HOME: codexHome,
-        CLAUDE_CONFIG_DIR: claudeHome,
-      },
+      env,
       stdio: ["ignore", "pipe", "pipe"],
     });
     snapshotServer.stdout.on("data", (chunk) => { output += chunk; });
@@ -483,10 +546,49 @@ test("content activity and persisted pre-boot evidence survive stale file times"
     assert.ok(entry);
     assert.equal(entry.activityAt, recordAt);
     assert.equal(entry.updatedAt, recordAt.slice(0, 10));
+    assert.equal(entry.metadata.interactive, null);
+    assert.equal(entry.metadata.exited, null);
+    const scanned = JSON.parse(response.body).sessions;
+    for (const [id, interactive] of [["closure-cli-one", true], ["closure-cli-two", true],
+      ["closure-sdk", false], ["closure-sdk-other", false], ["closure-unknown", null],
+      ["closure-codex-exec", false], ["closure-codex-source-exec", false], ["closure-codex-unknown", null],
+      ["closure-codex-subagent", false], ["closure-codex-child", false]]) {
+      assert.equal(scanned.find((session) => session.sessionId === id)?.metadata.interactive, interactive, id);
+      assert.equal(scanned.find((session) => session.sessionId === id)?.metadata.exited, id.startsWith("closure-codex") ? null : true, id);
+    }
     const config = JSON.parse((await localRequest("/api/config")).body);
     assert.deepEqual(config.liveness, {
       enabled: false, intervalMs: 15_000, codexLockDir: join(codexHome, "thread-writer-locks"),
     });
+  });
+
+  await t.test("Claude exit metadata follows the last cost-state and tolerates only queued exit records", async () => {
+    const response = await localRequest("/api/sessions/scan");
+    assert.equal(response.status, 200);
+    const sessions = JSON.parse(response.body).sessions;
+    for (const [id, , exited] of exitCases) {
+      const entry = sessions.find((session) => session.sessionId === id);
+      assert.ok(entry, id);
+      assert.equal(entry.metadata.interactive, true, id);
+      assert.equal(entry.metadata.exited, exited, id);
+    }
+  });
+
+  await t.test("on-demand closures exclude batch logs and never write when liveness is off", async () => {
+    const responses = await Promise.all([localRequest("/api/closures"), localRequest("/api/closures")]);
+    for (const response of responses) {
+      assert.equal(response.status, 200);
+      const body = JSON.parse(response.body);
+      assert.ok(Number.isFinite(Date.parse(body.checkedAt)));
+      assert.equal(body.closures.length, 1);
+      assert.deepEqual(body.closures[0].sessions.map((entry) => entry.sessionId).sort(), ["closure-cli-one", "closure-cli-two"]);
+      assert.equal(body.closures[0].pendingCount, 2);
+      assert.equal(body.closures[0].resumedCount, 0);
+    }
+    await assert.rejects(readFile(join(snapshotStateDir, "closures.json")), { code: "ENOENT" });
+    await assert.rejects(readFile(livePath), { code: "ENOENT" });
+    assert.equal((await httpRequest("/api/closures", { targetPort: snapshotPort, hostHeader: "evil.test" })).status, 403);
+    assert.equal((await httpRequest("/api/closures", { targetPort: snapshotPort, headers: { Origin: "http://evil.test" } })).status, 403);
   });
 
   await t.test("restart adds the idle Codex fixture from the previous-boot snapshot", async () => {
@@ -519,16 +621,56 @@ test("content activity and persisted pre-boot evidence survive stale file times"
     assert.equal(result.sessions.find((entry) => entry.sessionId === sessionId)?.source, "snapshot");
     assert.deepEqual(JSON.parse(await readFile(livePath, "utf8")), current);
   });
+
+  await t.test("the first heartbeat clears expired same-boot window evidence even with no live sessions", async () => {
+    await stopSnapshotServer();
+    const expired = {
+      ...snapshot,
+      savedAt: new Date(Date.now() - 660_000).toISOString(),
+      bootAt: new Date(Date.now() - uptime() * 1_000).toISOString(),
+      windowProbe: "ok",
+      sessions: snapshot.sessions.map((entry) => ({ ...entry, source: "window" })),
+    };
+    await writeFile(livePath, JSON.stringify(expired));
+    await startSnapshotServer({ liveness: "on", unavailableProbes: true });
+    const overview = JSON.parse((await localRequest("/api/closures")).body);
+    assert.equal(overview.closures.length, 1);
+    const current = parseLiveSnapshot(await readFile(livePath, "utf8"));
+    assert.ok(current);
+    assert.deepEqual(current.sessions, []);
+    assert.notEqual(current.savedAt, expired.savedAt);
+    assert.equal(current.windowProbe, process.platform === "win32" ? "unavailable" : "ok");
+    const saved = parseClosures(await readFile(join(snapshotStateDir, "closures.json"), "utf8"));
+    assert.equal(saved.closures.length, 1);
+    await stopSnapshotServer();
+    await startSnapshotServer({ unavailableProbes: true });
+    assert.equal(JSON.parse((await localRequest("/api/closures")).body).closures[0].closedAt, saved.closures[0].closedAt);
+    assert.deepEqual(parseClosures(await readFile(join(snapshotStateDir, "closures.json"), "utf8")), saved);
+  });
 });
 
-test("heartbeat records Codex writer locks without a window probe on any platform", { timeout: 14_000 }, async (t) => {
+test("heartbeat records Codex writer locks without a window probe on any platform", { timeout: 40_000 }, async (t) => {
   const heartbeatPort = port + 3_000;
   const heartbeatCodexHome = join(fixtureRoot, "heartbeat-codex");
   const heartbeatStateDir = join(fixtureRoot, "heartbeat-state");
+  const heartbeatClaudeHome = join(fixtureRoot, "heartbeat-claude");
   const lockDir = join(heartbeatCodexHome, "thread-writer-locks");
   const sessionDir = join(heartbeatCodexHome, "sessions");
   const folder = join(scanRoot, "codex-locked");
   await Promise.all([lockDir, sessionDir, folder].map((path) => mkdir(path, { recursive: true })));
+  const claudeDirectory = join(heartbeatClaudeHome, "projects", scanRoot.replace(/[:\\/]/gu, "-").toLowerCase());
+  await mkdir(claudeDirectory, { recursive: true });
+  const closureTime = new Date(Date.now() - 120_000);
+  for (const id of ["heartbeat-cli-one", "heartbeat-cli-two"]) {
+    const path = join(claudeDirectory, `${id}.jsonl`);
+    const lines = [
+      { type: "user", entrypoint: "cli", cwd: folder, sessionId: id,
+        timestamp: closureTime.toISOString(), message: { content: `Restore ${id}` } },
+      { type: "cost-state", timestamp: closureTime.toISOString() },
+    ];
+    await writeFile(path, `${lines.map(JSON.stringify).join("\n")}\n`);
+    await utimes(path, closureTime, closureTime);
+  }
   const records = [
     { type: "session_meta", payload: { id: "codex-locked", cwd: folder } },
     { type: "response_item", payload: { role: "user", content: [{ type: "input_text", text: "Keep this Codex session open." }] } },
@@ -549,7 +691,7 @@ test("heartbeat records Codex writer locks without a window probe on any platfor
     SESSION_LIVENESS: "on",
     SESSION_LIVENESS_INTERVAL_MS: "15000",
     CODEX_HOME: heartbeatCodexHome,
-    CLAUDE_CONFIG_DIR: join(fixtureRoot, "heartbeat-claude"),
+    CLAUDE_CONFIG_DIR: heartbeatClaudeHome,
   };
   // Force optional OS probes to be unavailable, including on Windows. Node itself
   // is spawned by absolute path; remove all PATH spellings for Windows environments.
@@ -587,13 +729,47 @@ test("heartbeat records Codex writer locks without a window probe on any platfor
   assert.equal(saved.sessions.length, 1);
   assert.deepEqual(saved.sessions[0], {
     agent: "codex", sessionId: "codex-locked", title: "Keep this Codex session open.",
-    folder, activityAt: saved.sessions[0].activityAt,
+    folder, activityAt: saved.sessions[0].activityAt, source: "lock",
   });
   const response = await httpRequest("/api/config", { targetPort: heartbeatPort });
   assert.equal(response.status, 200);
   assert.deepEqual(JSON.parse(response.body).liveness, {
     enabled: true, intervalMs: 15_000, codexLockDir: lockDir,
   });
+  const closuresPath = join(heartbeatStateDir, "closures.json");
+  const savedClosures = parseClosures(await readFile(closuresPath, "utf8"));
+  assert.equal(savedClosures.closures.length, 1);
+  assert.equal(savedClosures.closures[0].sessions.length, 2);
+  const beforeStat = await stat(closuresPath);
+  const responses = await Promise.all(Array.from({ length: 3 }, () => httpRequest("/api/closures", { targetPort: heartbeatPort })));
+  for (const response of responses) assert.equal(JSON.parse(response.body).closures[0].pendingCount, 2);
+  assert.equal((await stat(closuresPath)).mtimeMs, beforeStat.mtimeMs);
+  const resumedPath = join(claudeDirectory, "heartbeat-cli-one.jsonl");
+  await writeFile(resumedPath, `${JSON.stringify({ type: "user", entrypoint: "cli", cwd: folder,
+    sessionId: "heartbeat-cli-one", timestamp: new Date().toISOString(), message: { content: "Resumed title" } })}\n`);
+  await httpRequest("/api/sessions/scan", { targetPort: heartbeatPort });
+  let resumed;
+  const resumedDeadline = Date.now() + 25_000;
+  while (Date.now() < resumedDeadline) {
+    const response = await httpRequest("/api/closures", { targetPort: heartbeatPort });
+    assert.equal(response.status, 200);
+    resumed = JSON.parse(response.body).closures[0];
+    if (resumed?.resumedCount === 1) break;
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  assert.ok(resumed, "Closure must remain visible while one session is pending.");
+  assert.equal(resumed.pendingCount, 1);
+  assert.equal(resumed.resumedCount, 1);
+  assert.equal(resumed.sessions.find((entry) => entry.sessionId === "heartbeat-cli-one").title, "Resumed title");
+  assert.deepEqual(parseClosures(await readFile(closuresPath, "utf8")), savedClosures);
+  assert.equal((await stat(closuresPath)).mtimeMs, beforeStat.mtimeMs);
+  if (process.platform === "win32") {
+    assert.equal(saved.windowProbe, "unavailable");
+    const probe = JSON.parse((await httpRequest("/api/windows", { targetPort: heartbeatPort })).body);
+    assert.equal(probe.available, false);
+    assert.match(probe.reason, /ENOENT/u);
+    assert.match(output, /Window probe unavailable:.*ENOENT/u);
+  }
   // Snapshot parsing and restart merging after closure are covered by unit tests;
   // do not wait for another heartbeat or the five-minute unchanged-list refresh.
   await rm(lockPath);
